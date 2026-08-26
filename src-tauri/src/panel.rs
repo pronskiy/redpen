@@ -14,8 +14,8 @@
 //! bar changes, and the user's typing goes somewhere else — even though the panel itself
 //! never became key.
 
-use tauri::{Manager, WebviewWindow, Wry};
-use tauri_nspanel::{tauri_panel, CollectionBehavior, PanelLevel, StyleMask, WebviewWindowExt};
+use tauri::{AppHandle, Manager, WebviewWindow, Wry};
+use tauri_nspanel::{tauri_panel, ManagerExt, CollectionBehavior, PanelLevel, StyleMask, WebviewWindowExt};
 
 tauri_panel! {
     panel!(RedpenPanel {
@@ -54,3 +54,39 @@ pub fn convert(window: &WebviewWindow<Wry>) -> tauri::Result<()> {
 
     Ok(())
 }
+
+/// Show the panel without activating the app.
+///
+/// **Every one of these calls must happen on the main thread.** `tauri-nspanel` sends the
+/// ObjC message straight through, unlike Tauri's own `window.show()`, which dispatches for
+/// you. Calling it from the capture thread crashes the process outright:
+///
+/// ```text
+/// asi: ["Must only be used from the main thread"]
+/// -[NSWindow _doOrderWindow:] ... redpen_lib::panel::RawRedpenPanel
+/// ```
+///
+/// So the dispatch lives here rather than at the call sites — the hazard belongs to the
+/// module that owns the dependency, not to everyone who uses it.
+pub fn show(app: &AppHandle) {
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || match handle.get_webview_panel(LABEL) {
+        Ok(panel) => panel.order_front_regardless(),
+        Err(_) => {
+            if let Some(window) = handle.get_webview_window(LABEL) {
+                let _ = window.show();
+            }
+        }
+    });
+}
+
+pub fn hide(app: &AppHandle) {
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if let Some(window) = handle.get_webview_window(LABEL) {
+            let _ = window.hide();
+        }
+    });
+}
+
+const LABEL: &str = "main";

@@ -5,7 +5,6 @@ mod panel;
 
 use config::{Config, ConfigStore};
 use llm::InFlight;
-use tauri_nspanel::ManagerExt;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::Manager;
@@ -33,9 +32,7 @@ fn preview(text: &str) -> String {
 #[tauri::command]
 fn dismiss(app: tauri::AppHandle) {
     let aborted = app.state::<InFlight>().abort();
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.hide();
-    }
+    panel::hide(&app);
     println!("[redpen] dismissed{}", if aborted { " — request aborted" } else { "" });
 }
 
@@ -112,17 +109,9 @@ pub fn run() {
                                 // would move focus here and the synthetic ⌘C would target
                                 // our own empty window instead of the user's selection.
                                 //
-                                // `order_front_regardless`, never `set_focus`: the panel
-                                // must appear without the app activating. set_focus would
-                                // ask for exactly the thing B1.2 exists to prevent.
-                                match app.get_webview_panel("main") {
-                                    Ok(panel) => panel.order_front_regardless(),
-                                    Err(_) => {
-                                        if let Some(window) = app.get_webview_window("main") {
-                                            let _ = window.show();
-                                        }
-                                    }
-                                }
+                                // panel::show hops to the main thread for us — AppKit
+                                // window ordering from this capture thread is a hard crash.
+                                panel::show(&app);
                                 let loaded = app.state::<ConfigStore>().current();
                                 let handle = tauri::async_runtime::spawn(llm::run(
                                     app.clone(),
