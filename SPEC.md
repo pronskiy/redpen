@@ -18,7 +18,9 @@
 
 ### Current focus
 
-**Now on:** Epic A → Phase A3 → step A3.3 — collect 20 real texts into `docs/corpus/`.
+**Now on:** Epic A → Phase A3 → step A3.4 — run the prompt over the corpus and rate it.
+
+Blocked only on an API key (`ANTHROPIC_API_KEY`, or `api_key` in the app's `config.json`).
 
 A1.1 was built ahead of the gate (it is a scaffold, not an investment — the kill criterion
 stays executable). Nothing further in A1/A2 should be built until A3 passes.
@@ -120,7 +122,7 @@ Nothing here depends on A1 or A2: corpus evaluation is offline text-in, text-out
 |------|-------------|--------|-------|
 | A3.1 | Draft system prompt v1 (L1-aware critique + variants + tags) | ✅ | `prompts/critique.md` |
 | A3.2 | Eval harness: prompt variant × corpus → rating sheet | ✅ | `evals/run.sh` |
-| A3.3 | Corpus: 20 real recent texts by Roman | 🔲 | **needs human** — blocks A3.4 |
+| A3.3 | Corpus: 20 real recent texts by Roman | ✅ | 20 texts, verbatim, gitignored |
 | A3.4 | Iterate prompt against corpus; record verdicts | 🔲 | needs human |
 
 **Steps (detail):**
@@ -134,10 +136,15 @@ Nothing here depends on A1 or A2: corpus evaluation is offline text-in, text-out
 
 | Guardrail | Criteria (pass/fail) | Status | Actual outcome |
 |-----------|----------------------|--------|----------------|
-| Usefulness | ≥ 15/20 corpus outputs rated "useful" by Roman | 🔲 | |
+| Usefulness | ≥ 15/20 corpus outputs rated "useful" **or "correctly-silent"** by Roman | 🔲 | |
 | Structure | ```json block parses **and every tag is in vocabulary** in 20/20 outputs | 🔲 | automated by `evals/run.sh` |
 | Misteaching | ≤ 2 outputs contain a "wrong item" (diagnostic; recorded per output) | 🔲 | |
 | **Kill criterion** | If < 10/20 after 3 prompt iterations: stop, rethink the product before building any UI | 🔲 | |
+
+`correctly-silent` was added after the corpus landed: roughly a quarter of real messages
+("Feeling sick, taking off today") have nothing wrong with them, and a prompt that stays quiet
+on those is behaving correctly — but under a useful/water/wrong rubric that correct behaviour
+scores as a miss, so a perfect prompt could fail the gate. Decision #22.
 
 ---
 
@@ -321,6 +328,7 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 | 19 | 2026-08-26 | Eval harness is bash + curl, and is kept permanently | Reaches the gate with no Rust toolchain, then becomes the prompt regression suite after v1. Rust has no official Anthropic SDK, so raw HTTP is the path in the app too | Roman |
 | 20 | 2026-08-26 | Frontend is Vite + vanilla TypeScript, no framework | Decision #3 bought Tauri for CSS iteration speed; a framework adds weight without helping a single streaming card. Vite gives HMR, which is the part that actually matters for C1 | Roman |
 | 21 | 2026-08-26 | macOS activation policy is `Accessory`, set at scaffold time | Not cosmetic: a regular-policy app activates when its window shows, which would defeat Epic B before it starts. Cheaper to set now than to debug as focus theft later | Roman |
+| 22 | 2026-08-26 | Rubric gains a `correctly-silent` pass label | The corpus turned out to contain several short messages with genuinely nothing to critique. Under useful/water/wrong, correct restraint on those scores as a miss, so a prompt behaving exactly as designed could trip the kill criterion. Silence on a clean text is a pass, not a failure — the bar stays at 15/20 | Roman |
 
 ---
 

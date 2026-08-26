@@ -147,14 +147,17 @@ ok_parse=0; ok_vocab=0; total=0; declare -a ROWS=()
   echo
   echo "- **useful** — names at least one thing you had not noticed was off, and the natural"
   echo "  version is one you would actually have sent. It would have changed the text."
+  echo "- **correctly-silent** — the text really was fine and the critique said so instead of"
+  echo "  manufacturing something. Counts as a pass: on a corpus of real writing several texts"
+  echo "  have nothing wrong with them, and restraint on those is the behaviour you want."
   echo "- **water** — accurate but generic. Praise, restatement, or advice that would fit any"
   echo "  other text. Nothing actionable about *this* one."
   echo "- **wrong** — flags correct English as an error, proposes a rewrite that is worse or"
   echo "  changes your meaning, or misdiagnoses the cause."
   echo
   echo "\`wrong items\` is a separate count of individual bad fragments, diagnostic only — the"
-  echo "SPEC guardrail is ≥ 15/20 rated **useful**. Track it anyway: a prompt that scores"
-  echo "useful while misteaching twice per run is not shippable."
+  echo "SPEC guardrail is ≥ 15/20 rated **useful** or **correctly-silent**. Track wrong items"
+  echo "anyway: a prompt that scores useful while misteaching twice per run is not shippable."
   echo
   echo "## Summary"
   echo
@@ -206,7 +209,7 @@ for src in "${CORPUS[@]}"; do
   {
     echo "### $n. \`$base\`"
     echo
-    echo "**Rating:** _(useful / water / wrong)_ · **Wrong items:** _( )_ · **Notes:**"
+    echo "**Rating:** _(useful / correctly-silent / water / wrong)_ · **Wrong items:** _( )_ · **Notes:**"
     echo
     echo "<details><summary>original text</summary>"
     echo
