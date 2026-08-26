@@ -18,7 +18,7 @@
 
 ### Current focus
 
-**Now on:** Epic B → Phase B1 → step B1.1 — convert the window to a non-activating NSPanel.
+**Now on:** Epic C → Phase C1 → step C1.1 — vibrancy and the card design. **Needs Roman's design call first.**
 
 **Epic A is complete.** Hotkey → capture → streamed critique → Esc aborts, end to end. Two
 loose ends carried forward:
@@ -219,7 +219,7 @@ scores as a miss, so a perfect prompt could fail the gate. Decision #22.
 
 | Guardrail | Criteria (pass/fail) | Status | Actual outcome |
 |-----------|----------------------|--------|----------------|
-| Latency | First visible token < 1.5 s p50 over 10 runs | 🔄 | **n=4: 1199, 1535, 1215, 1452 ms** (sonnet-5, effort medium, ~83-char inputs). Median ≈ 1333 ms, under the bar — but one sample **exceeded 1500 ms**, so the margin is thin and 4 is not 10. Effort is the lever if it fails (decision #16); dropping to `low` is the first thing to try |
+| Latency | First visible token < 1.5 s p50 over 10 runs | 🔄 | **n=8: 1199, 1215, 1336, 1357, 1369, 1452, 1614, 4058 ms** (sonnet-5, effort medium). Median **1363 ms**, under the bar; 2/8 exceeded 1500 ms and the 4058 ms outlier was a first call after a rebuild (cold connection). Two more runs completes the sample. Effort is the lever if it fails (decision #16) |
 | Abort | Esc mid-stream → request cancelled (verified in logs), window closes | ✅ | 2026-08-26: `first token in 1215 ms` → `dismissed — request aborted`, **with no `critique done` line following** — the stream really was killed, not just hidden |
 | Config loop | Edit system_prompt in editor → next invocation uses it, no restart | ✅ | Reload verified 2026-08-26 (prompt edit → `prompt reloaded`, no restart; identical content correctly produced **no** reload; hotkey rebound live; malformed JSON logged and the app stayed up). `llm.rs` reads `system_prompt` from the store per invocation, so the next press uses the edited prompt |
 
@@ -234,10 +234,10 @@ scores as a miss, so a perfect prompt could fail the gate. Decision #22.
 
 | Step | Description | Status | Notes |
 |------|-------------|--------|-------|
-| B1.1 | Pin `tauri-nspanel` to a commit; convert window pre-show | 🔲 | |
-| B1.2 | Disable both focus paths; floating level; all-spaces behavior | 🔲 | |
-| B1.3 | Position at mouse; clamp to screen; multi-monitor coords | 🔲 | |
-| B1.4 | Dismissal: Esc, click-outside, auto-hide on app switch | 🔲 | |
+| B1.1 | Pin `tauri-nspanel` to a commit; convert window pre-show | ✅ | pinned to `c9ec213`; converted while hidden |
+| B1.2 | Disable both focus paths; floating level; all-spaces behavior | ✅ | verified: focus stays in Slack |
+| B1.3 | Position at mouse; clamp to screen; multi-monitor coords | ✅ | all maths stays in AppKit coords — decision #29 |
+| B1.4 | Dismissal: Esc, click-outside, auto-hide on app switch | ✅ | global NSEvent monitors — decision #30 |
 
 **Steps (detail):**
 
@@ -250,9 +250,9 @@ scores as a miss, so a perfect prompt could fail the gate. Decision #22.
 
 | Guardrail | Criteria (pass/fail) | Status | Actual outcome |
 |-----------|----------------------|--------|----------------|
-| No focus theft | Invoke while typing in Slack: caret stays, typing continues uninterrupted, menu bar still shows Slack | 🔲 | |
-| Dismissal | Esc / click-outside / ⌘Tab all hide the panel; stream aborted | 🔲 | |
-| Multi-monitor | Correct position on a 2-display setup with different resolutions | 🔲 | |
+| No focus theft | Invoke while typing in Slack: caret stays, typing continues uninterrupted, menu bar still shows Slack | ✅ | **pass**, reported by Roman 2026-08-26 — "focus stays in slack" |
+| Dismissal | Esc / click-outside / ⌘Tab all hide the panel; stream aborted | ✅ | **pass** — 4 dismissals logged, every one `dismissed — request aborted`, including one mid-stream (first token 1336 ms, no `critique done` after) |
+| Multi-monitor | Correct position on a 2-display setup with different resolutions | 🔄 | Covered by Roman's "all works", but **not separately confirmed** and vacuous if only one display was attached. Re-check on a real 2-display setup before trusting it |
 
 ---
 
@@ -349,6 +349,9 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 | 25 | 2026-08-26 | Default model is `claude-sonnet-5` — reverses #15 | Roman's call after run 1 of the gate. $2/$10 per MTok against Opus 5's $5/$25, on a tool fired dozens of times a day. Two consequences carried forward: this tier rejects `fallbacks` (#24), and the A3 gate now certifies *this* model plus the prompt — switching back to Opus means re-running the corpus, for the same reason effort must match production (#16) | Roman |
 | 26 | 2026-08-26 | Prompt v2 adds a `typo` tag, quarantined from the Epic E digest | Without a bucket for them, typos were being misfiled into *learnable* categories — run 1 tagged the doubled article in "the the build-up" as `article-extra`, which would have shown up in the journal as an article weakness it is not. Tagged for integrity, excluded from the digest: typo frequency is not something to practise. **Measured cost:** the tag reads to the model as licence — it fired in 5/20 outputs and `15-text` lost its correctly-silent verdict to a note about capitalising "i". The "never the only thing you say" cap is advisory and did not hold; v3 must make it mechanical | Roman |
 | 27 | 2026-08-26 | Synthetic shortcuts use raw keycodes, never `Key::Unicode` | `Key::Unicode('c')` resolves the character through the *active keyboard layout*; when that lookup fails — which it does with a non-Latin layout frontmost, and this app is built for a Russian speaker — enigo falls back to keycode 0. `kVK_ANSI_A` **is** 0, so redpen sent ⌘A: the target app selected all, nothing reached the pasteboard, and capture failed looking like secure input. Now `kVK_ANSI_C` (0x08) directly. Note the 7 capture unit tests could not have caught this: they inject the keystroke as a closure, so the one wrong line is never exercised — only the manual matrix covers it | Roman |
+| 28 | 2026-08-26 | All AppKit calls are dispatched to the main thread inside `panel.rs` | Cost a hard crash (`SIGTRAP`, `"Must only be used from the main thread"`, `-[NSWindow _doOrderWindow:]`): capture deliberately runs on its own thread, and it called `order_front_regardless` straight into AppKit. Tauri's own `window.show()` hides this by dispatching internally; `tauri-nspanel` sends the ObjC message directly, so swapping one for the other silently moved a thread requirement onto the caller. The dispatch now lives behind `panel::show`/`panel::hide` so no call site can reintroduce it | Roman |
+| 29 | 2026-08-26 | Panel positioning never leaves AppKit screen coordinates | `mouseLocation`, `NSScreen::frame`, `visibleFrame` and `setFrameOrigin` all share one bottom-left, y-up space spanning every display, so containment and clamping are plain comparisons. The "classic two-monitor off-screen bug" the spec warns about comes from mixing that with the top-left y-down space Tauri's `set_position` and the AX APIs use — the flip needs the *primary* screen's height, and taking it from the wrong screen throws the panel a whole display away. Never converting cannot convert wrongly | Roman |
+| 30 | 2026-08-26 | Dismissal uses global NSEvent *monitors*, not a registered Esc shortcut | A non-activating panel never becomes key, so no keystroke reaches the webview and the A2.3 JS listener is permanently dead code (removed, not patched). Registering Esc as a global shortcut was the alternative and was rejected: it would swallow Esc system-wide while the panel is open, breaking vim, dialogs and every modal. A global monitor observes without consuming, so Esc both reaches the source app and dismisses the panel | Roman |
 
 ---
 
