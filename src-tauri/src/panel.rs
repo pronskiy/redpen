@@ -35,9 +35,14 @@ pub fn convert(window: &WebviewWindow<Wry>) -> tauri::Result<()> {
     // Above ordinary windows, below menus and status items.
     panel.set_level(PanelLevel::Floating.value());
 
-    // Focus path 2. Keeping the titled/closable bits so the window stays visible and
-    // draggable while Epic B is being tested; C1.1 strips the chrome for the HUD card.
-    panel.set_style_mask(StyleMask::new().nonactivating_panel().value());
+    // Focus path 2, on a borderless mask.
+    //
+    // `StyleMask::new()` is Titled|Closable|Miniaturizable|Resizable — handing that to a
+    // window the config created with `decorations: false` and `transparent: true` is a
+    // contradiction AppKit resolves by aborting the process, and because it happens inside
+    // an ObjC callback the only symptom is "panic in a function that cannot unwind" with
+    // no backtrace. Borderless is also simply correct for a HUD card.
+    panel.set_style_mask(StyleMask::empty().nonactivating_panel().value());
 
     // Follow the user across Spaces, and show over full-screen apps — redpen is summoned
     // wherever you happen to be typing, which is often a full-screen editor.
