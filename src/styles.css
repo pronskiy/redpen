@@ -1,31 +1,62 @@
-/* Deliberately plain. Vibrancy, typography and the fragment/rewrite pairing are
-   step C1.1 — styling before the A3 gate passes is the mistake decision #10 exists
-   to prevent. */
+/* Deliberately plain. Vibrancy, typography and the fragment/rewrite pairing are C1.1 —
+   styling before the A3 gate passes is the mistake decision #10 exists to prevent. */
 :root {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.55;
   color: #1c1c1e;
   background: #f5f5f7;
+  --quote: #8e8e93;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     color: #f2f2f7;
     background: #1c1c1e;
+    --quote: #8e8e93;
   }
 }
 
 body {
   margin: 0;
-  padding: 16px;
+  padding: 16px 18px;
 }
 
-.card {
-  min-height: 100px;
+#critique {
+  overflow-y: auto;
+  max-height: calc(100vh - 60px);
 }
 
-.placeholder {
-  margin: 0;
-  opacity: 0.6;
+#critique > :first-child { margin-top: 0; }
+#critique p { margin: 0 0 0.7em; }
+
+/* The prompt quotes each offending fragment as a blockquote. */
+#critique blockquote {
+  margin: 0.9em 0 0.35em;
+  padding-left: 0.8em;
+  border-left: 2px solid var(--quote);
+  color: var(--quote);
+}
+
+#critique pre {
+  overflow-x: auto;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(127, 127, 127, 0.14);
+  font-size: 12px;
+}
+
+#status {
+  min-height: 1.2em;
+  font-size: 12px;
+  opacity: 0.55;
+}
+
+#status[data-kind="error"] {
+  color: #d7263d;
+  opacity: 1;
+}
+
+@media (prefers-color-scheme: dark) {
+  #status[data-kind="error"] { color: #ff6b6b; }
 }

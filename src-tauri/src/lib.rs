@@ -26,10 +26,22 @@ fn preview(text: &str) -> String {
     }
 }
 
+/// Dismissing must *abort*, not just hide. A hidden window with a live request keeps
+/// generating tokens you are no longer reading, and billing for them.
+#[tauri::command]
+fn dismiss(app: tauri::AppHandle) {
+    let aborted = app.state::<InFlight>().abort();
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.hide();
+    }
+    println!("[redpen] dismissed{}", if aborted { " — request aborted" } else { "" });
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .invoke_handler(tauri::generate_handler![dismiss])
         .setup(|app| {
             // Accessory policy: no Dock icon, no app menu, and the app never becomes the
             // active application. Epic B rests on this — a regular-policy app steals focus
@@ -93,6 +105,13 @@ pub fn run() {
                         std::thread::spawn(move || match capture::selection() {
                             Ok(text) => {
                                 println!("[redpen] captured {} chars{}", text.chars().count(), preview(&text));
+                                // Show only *after* the copy has landed. Showing first
+                                // would move focus here and the synthetic ⌘C would target
+                                // our own empty window instead of the user's selection.
+                                if let Some(window) = app.get_webview_window("main") {
+                                    let _ = window.show();
+                                    let _ = window.set_focus();
+                                }
                                 let loaded = app.state::<ConfigStore>().current();
                                 let handle = tauri::async_runtime::spawn(llm::run(
                                     app.clone(),

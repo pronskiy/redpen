@@ -18,11 +18,19 @@
 
 ### Current focus
 
-**Now on:** Epic A → Phase A2 → step A2.2 — `llm.rs`, the streaming SSE client.
+**Now on:** Epic B → Phase B1 → step B1.1 — convert the window to a non-activating NSPanel.
 
-**Phase A1 is complete and its exit guardrails are all green, and A2.1 is done.** A2.2 has a
-working reference: `evals/run.sh` has been calling `{base_url}/v1/messages` with the same body
-all along — including the model-tier gate on `fallbacks` (decision #24).
+**Epic A is complete.** Hotkey → capture → streamed critique → Esc aborts, end to end. Two
+loose ends carried forward:
+
+1. **The A3 usefulness guardrail is still unrated** — the only guardrail in Epic A with
+   nothing behind it, and the one the risk register calls fatal.
+2. **Latency has 4 samples, not 10**, and one exceeded the bar. Ten presses closes it.
+
+Note for B1.4: Esc currently works through a JS `keydown` listener because the window is
+still an ordinary focusable window. Once it becomes a non-activating panel it will never be
+key, Esc will land in the source app, and that listener stops firing — it must be replaced
+with a global event monitor, not patched.
 
 **Still open: the A3 usefulness guardrail.** Two prompt versions have been run and the
 structure half passes 20/20, but nothing is rated, so the kill criterion has never been
@@ -199,7 +207,7 @@ scores as a miss, so a perfect prompt could fail the gate. Decision #22.
 |------|-------------|--------|-------|
 | A2.1 | Config loader with hot reload (fs watch) | ✅ | 8 unit tests; reload driven end-to-end |
 | A2.2 | `llm.rs`: SSE client streaming deltas as Tauri events | ✅ | 12 parser tests; verified live end-to-end |
-| A2.3 | Webview renders the markdown stream; Esc closes + aborts | 🔲 | |
+| A2.3 | Webview renders the markdown stream; Esc closes + aborts | ✅ | abort proven: no `critique done` after Esc |
 
 **Steps (detail):**
 
@@ -211,9 +219,9 @@ scores as a miss, so a perfect prompt could fail the gate. Decision #22.
 
 | Guardrail | Criteria (pass/fail) | Status | Actual outcome |
 |-----------|----------------------|--------|----------------|
-| Latency | First visible token < 1.5 s p50 over 10 runs | 🔄 | `llm.rs` now logs `first token in N ms`. **n=1 so far: 1199 ms** (sonnet-5, effort medium, 82-char input) — under the bar, but one sample is not a p50. Nine more presses fills this in |
-| Abort | Esc mid-stream → request cancelled (verified in logs), window closes | 🔲 | |
-| Config loop | Edit system_prompt in editor → next invocation uses it, no restart | 🔄 | Reload half verified end-to-end 2026-08-26: prompt edit → `prompt reloaded (6073 chars)`, no restart; identical content correctly produced **no** reload; hotkey rebound live `⌥⌘E → ⌥⌘R → ⌥⌘E`; malformed JSON logged and the app stayed up. The *consuming* half needs A2.2 |
+| Latency | First visible token < 1.5 s p50 over 10 runs | 🔄 | **n=4: 1199, 1535, 1215, 1452 ms** (sonnet-5, effort medium, ~83-char inputs). Median ≈ 1333 ms, under the bar — but one sample **exceeded 1500 ms**, so the margin is thin and 4 is not 10. Effort is the lever if it fails (decision #16); dropping to `low` is the first thing to try |
+| Abort | Esc mid-stream → request cancelled (verified in logs), window closes | ✅ | 2026-08-26: `first token in 1215 ms` → `dismissed — request aborted`, **with no `critique done` line following** — the stream really was killed, not just hidden |
+| Config loop | Edit system_prompt in editor → next invocation uses it, no restart | ✅ | Reload verified 2026-08-26 (prompt edit → `prompt reloaded`, no restart; identical content correctly produced **no** reload; hotkey rebound live; malformed JSON logged and the app stayed up). `llm.rs` reads `system_prompt` from the store per invocation, so the next press uses the edited prompt |
 
 ---
 

@@ -7,14 +7,10 @@
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
-    <!-- Ugly on purpose (decision #10). The card is Epic C; this only proves the
-         webview boots inside a window that starts hidden. -->
-    <main id="critique" class="card">
-      <p class="placeholder">
-        redpen scaffold — step A1.1.<br />
-        No hotkey, no capture, no LLM yet.
-      </p>
-    </main>
+    <!-- Ugly on purpose (decision #10). Vibrancy, the card, and pairing each fragment with
+         its rewrite are C1. This only has to stream and dismiss. -->
+    <main id="critique" aria-live="polite"></main>
+    <div id="status" role="status"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

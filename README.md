@@ -22,6 +22,8 @@ against real writing before any of the app is worth building.
 | A1.3 capture | ✅ 7 unit tests + verified in 5 apps |
 | A1.4 test matrix | ✅ `docs/manual-tests.md`, all green |
 | A2.1 config + hot reload | ✅ watches config.json and the prompt file |
+| A2.2 streaming llm | ✅ SSE → Tauri events |
+| A2.3 render + abort | ✅ **Epic A complete** — hotkey to critique, Esc aborts |
 
 ## Layout
 
