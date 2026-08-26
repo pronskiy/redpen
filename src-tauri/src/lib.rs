@@ -1,9 +1,11 @@
 mod capture;
 mod config;
 mod llm;
+mod panel;
 
 use config::{Config, ConfigStore};
 use llm::InFlight;
+use tauri_nspanel::ManagerExt;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::Manager;
@@ -41,6 +43,7 @@ fn dismiss(app: tauri::AppHandle) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_nspanel::init())
         .invoke_handler(tauri::generate_handler![dismiss])
         .setup(|app| {
             // Accessory policy: no Dock icon, no app menu, and the app never becomes the
@@ -108,9 +111,17 @@ pub fn run() {
                                 // Show only *after* the copy has landed. Showing first
                                 // would move focus here and the synthetic ⌘C would target
                                 // our own empty window instead of the user's selection.
-                                if let Some(window) = app.get_webview_window("main") {
-                                    let _ = window.show();
-                                    let _ = window.set_focus();
+                                //
+                                // `order_front_regardless`, never `set_focus`: the panel
+                                // must appear without the app activating. set_focus would
+                                // ask for exactly the thing B1.2 exists to prevent.
+                                match app.get_webview_panel("main") {
+                                    Ok(panel) => panel.order_front_regardless(),
+                                    Err(_) => {
+                                        if let Some(window) = app.get_webview_window("main") {
+                                            let _ = window.show();
+                                        }
+                                    }
                                 }
                                 let loaded = app.state::<ConfigStore>().current();
                                 let handle = tauri::async_runtime::spawn(llm::run(
@@ -177,6 +188,12 @@ pub fn run() {
             let window = app
                 .get_webview_window("main")
                 .expect("window `main` is declared in tauri.conf.json");
+
+            // B1.1: convert while still hidden. After the first show is one frame too late.
+            match panel::convert(&window) {
+                Ok(()) => println!("[redpen] window converted to a non-activating NSPanel"),
+                Err(e) => eprintln!("[redpen] panel conversion failed: {e}"),
+            }
             println!(
                 "[redpen] main window ready · visible={:?} · config={}",
                 window.is_visible(),
@@ -184,6 +201,13 @@ pub fn run() {
             );
 
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+                window.app_handle().state::<InFlight>().abort();
+            }
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

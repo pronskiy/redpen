@@ -26,6 +26,10 @@ tokio = { version = "1.53.1", features = ["rt"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 enigo = "0.6.1"
+# Pinned to a commit, not a branch: this is the only way to get a non-activating NSPanel in
+# Tauri, it is not on crates.io, and a moving branch under a load-bearing dependency is the
+# risk the register calls out. Panel code stays isolated in panel.rs so a swap stays cheap.
+tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", rev = "c9ec2130422200f0863b23dfdad02b133a529b07" }
 notify = "8.2.0"
 objc2 = "0.6.4"
 objc2-app-kit = "0.3.2"
