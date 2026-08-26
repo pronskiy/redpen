@@ -101,6 +101,17 @@ function markAdded(words: string[], added: boolean[]): string {
 
 const INLINE_MAX_WORDS = 2;
 
+/**
+ * Below this share of surviving words, the rewrite is not an edit of the quote — it is a
+ * different sentence, and diffing two unrelated strings produces noise. It happens when the
+ * model quotes the wrong span (observed: quote "in a week, unless someone has any
+ * objections" against rewrite "in a while"), and striking eight words to add one reads as a
+ * bug even when the underlying critique is fine.
+ *
+ * Show both plainly instead. A diff that cannot be trusted is worse than no diff.
+ */
+const MIN_KEPT_SHARE = 0.3;
+
 function renderNote(note: Note): string {
   const native = note.natives[0] ?? "";
   const alt = note.natives[1];
@@ -128,6 +139,17 @@ function renderNote(note: Note): string {
         <p class="quote">${removedHtml}</p>
         <p class="fix"><span class="elbow">└</span> <ins>${esc(fix || "—")}</ins>
            <span class="tell">${esc(note.tell)}</span>${altHtml}</p>
+      </div>`;
+  }
+
+  const keptShare = aw.length ? d.kept.filter(Boolean).length / aw.length : 1;
+  if (keptShare < MIN_KEPT_SHARE) {
+    // Too little in common to call it an edit — no strikethrough, no green.
+    return `
+      <div class="note stacked">
+        <p class="quote">${esc(note.quote)}</p>
+        <p class="tell">${esc(note.tell)}</p>
+        <p class="native"><span class="elbow">→</span> ${esc(native)}${altHtml}</p>
       </div>`;
   }
 
