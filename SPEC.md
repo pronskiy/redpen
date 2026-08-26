@@ -20,6 +20,9 @@
 
 **Now on:** Epic A → Phase A3 → step A3.3 — collect 20 real texts into `docs/corpus/`.
 
+A1.1 was built ahead of the gate (it is a scaffold, not an investment — the kill criterion
+stays executable). Nothing further in A1/A2 should be built until A3 passes.
+
 **Needs Roman, and blocks everything else.** A3.1 (prompt) and A3.2 (harness) are done; the
 gate is waiting on the corpus. Start here: `docs/corpus/README.md`.
 
@@ -142,14 +145,14 @@ Nothing here depends on A1 or A2: corpus evaluation is offline text-in, text-out
 
 | Step | Description | Status | Notes |
 |------|-------------|--------|-------|
-| A1.1 | Tauri v2 scaffold; main window `"visible": false` in config | 🔲 | |
+| A1.1 | Tauri v2 scaffold; main window `"visible": false` in config | ✅ | accessory activation policy + tray icon |
 | A1.2 | Global hotkey registration + menu-bar tray icon (quit, open config) | 🔲 | |
 | A1.3 | `capture.rs`: snapshot → ⌘C → poll → read → restore | 🔲 | |
 | A1.4 | Manual capture test checklist executed | 🔲 | |
 
 **Steps (detail):**
 
-- **A1.1 — Scaffold.** Deliverable: `npm run tauri dev` boots an app with a hidden window and a tray icon. Window is created hidden so it can later be converted to a panel *before* first show.
+- **A1.1 — Scaffold.** ✅ Deliverable met: `npm run tauri dev` boots an app with a hidden window and a menu-bar tray icon. Window is created hidden so it can later be converted to a panel *before* first show. Also set here: `ActivationPolicy::Accessory`, so there is no Dock icon, no app menu, and the process never becomes the active application — the premise Epic B rests on. Frontend is Vite + vanilla TS (HMR for the C1 card iteration, no framework weight in a HUD). Tray art is the stock Tauri icon; a menu-bar template image is a C1 job.
 - **A1.2 — Hotkey + tray.** Deliverable: hotkey (default `⌥⌘E`, configurable) fires a Rust handler that logs; tray menu has Quit and Open Config (opens the JSON in the default editor).
 - **A1.3 — Capture module.** Deliverable: `capture::selection() -> Result<String, CaptureError>` plus unit tests for the snapshot/restore logic (pasteboard mocked).
   ```rust
@@ -316,6 +319,8 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 | 17 | 2026-08-26 | Tag vocabulary fixed at 20 tags for v1 | Freeform tags make Epic E unaggregatable — "14 article misses this month" needs a stable key. Tags repeat per occurrence rather than dedupe, because frequency is the whole signal. The list lives in the prompt; the harness extracts and validates against it | Roman |
 | 18 | 2026-08-26 | The prompt must never emit a whole-text rewrite | Decision #1 is enforced in the *app* by having no paste path — but the prompt can defeat it unaided: a clean corrected version in the output just gets copied, and the pedagogy is gone. Per-fragment rewrites only | Roman |
 | 19 | 2026-08-26 | Eval harness is bash + curl, and is kept permanently | Reaches the gate with no Rust toolchain, then becomes the prompt regression suite after v1. Rust has no official Anthropic SDK, so raw HTTP is the path in the app too | Roman |
+| 20 | 2026-08-26 | Frontend is Vite + vanilla TypeScript, no framework | Decision #3 bought Tauri for CSS iteration speed; a framework adds weight without helping a single streaming card. Vite gives HMR, which is the part that actually matters for C1 | Roman |
+| 21 | 2026-08-26 | macOS activation policy is `Accessory`, set at scaffold time | Not cosmetic: a regular-policy app activates when its window shows, which would defeat Epic B before it starts. Cheaper to set now than to debug as focus theft later | Roman |
 
 ---
 

@@ -1,7 +1,24 @@
-.DS_Store
-
-# eval outputs contain real personal writing + API responses
+# --- redpen: real writing stays local while repo visibility is undecided (SPEC §7)
 docs/corpus/*.md
 !docs/corpus/README.md
 docs/corpus/results-*.md
 evals/.out/
+
+# --- rust / tauri
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# --- node / vite
+node_modules
+dist
+dist-ssr
+*.local
+*.log
+npm-debug.log*
+
+# --- editors / os
+.DS_Store
+.idea
+.vscode/*
+!.vscode/extensions.json
+*.sw?
