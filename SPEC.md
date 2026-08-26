@@ -10,6 +10,7 @@
 |------|--------|--------|
 | 2026-08-26 | Initial spec created | Roman |
 | 2026-08-26 | Added §1 Positioning vs Apple Intelligence; decision #13; sherlocking risk | Roman |
+| 2026-08-26 | Reordered Epic A to A3 → A1 → A2; A3.1/A3.2 delivered; decisions #14–19 | Roman |
 
 ### Status legend
 
@@ -17,7 +18,10 @@
 
 ### Current focus
 
-**Now on:** Epic A → Phase A1 → step A1.1 — scaffold the Tauri project with a hidden main window.
+**Now on:** Epic A → Phase A3 → step A3.3 — collect 20 real texts into `docs/corpus/`.
+
+**Needs Roman, and blocks everything else.** A3.1 (prompt) and A3.2 (harness) are done; the
+gate is waiting on the corpus. Start here: `docs/corpus/README.md`.
 
 ---
 
@@ -50,6 +54,8 @@ Consequence for priorities: the panel (Epics B–C) carries no defensible value 
 | Response contract | Markdown critique + trailing ```json block with error tags | Journal (Epic E) needs structured tags from day one even though the journal ships later. Tags at the *end* so the user reads prose, not streaming JSON |
 | Core principle | **Never insert, replace, or paste anything** | The entire thesis. No paste-back code path exists in this codebase |
 | Caret positioning | Deferred to Epic D via a Swift shim (`swift-rs`) | Raw AX C API from Rust is ~120 lines of unsafe FFI; a `@_cdecl` Swift function is 15 lines. Panel positions at the mouse cursor until then |
+| Model | `claude-opus-5`, adaptive thinking, `output_config.effort: "low"` | Critique quality is the entire product, so no downgrade for cost. Effort — not model tier — is the latency lever; thinking is on by default on Opus 5 and renders as a blank card until it finishes (decision #16) |
+| Tag vocabulary | Fixed 20-tag list, embedded in the prompt itself | Epic E cannot aggregate freeform tags. The harness extracts the list from the prompt and validates every response against it, so there is one source of truth |
 | License hygiene | Read WritingTools for techniques; copy zero lines | WritingTools is GPL-3.0; repo visibility here is undecided, so keep the codebase unencumbered |
 
 ---
@@ -96,6 +102,41 @@ Hotkey fires → text is captured through the pasteboard → streamed to Anthrop
 
 **Goal:** hotkey → captured selection → streamed critique in an unstyled window, end to end.
 **Success metrics:** capture works in the 5 daily-driver apps; first token < 1.5 s (p50); prompt validated on real texts (gate A3).
+
+**Build order: A3 → A1 → A2.** Phase numbering is kept as-is for history; the order is not the
+numbering. A3 is the gate with the kill criterion, and it becomes unexecutable the moment A1
+and A2 exist — nobody kills a project after spending weekends on the plumbing. A3 depends on
+neither. See decision #14.
+
+#### Phase A3 — Prompt validation gate · **runs first**
+
+Nothing here depends on A1 or A2: corpus evaluation is offline text-in, text-out, driven by
+`evals/run.sh` (bash + curl, no Rust toolchain). Decision #14.
+
+| Step | Description | Status | Notes |
+|------|-------------|--------|-------|
+| A3.1 | Draft system prompt v1 (L1-aware critique + variants + tags) | ✅ | `prompts/critique.md` |
+| A3.2 | Eval harness: prompt variant × corpus → rating sheet | ✅ | `evals/run.sh` |
+| A3.3 | Corpus: 20 real recent texts by Roman | 🔲 | **needs human** — blocks A3.4 |
+| A3.4 | Iterate prompt against corpus; record verdicts | 🔲 | needs human |
+
+**Steps (detail):**
+
+- **A3.1 — Prompt.** Deliverable: `prompts/critique.md` (copied into config default). Contract: author's L1 is Russian — hunt calques (articles, prepositions, "possibility to", tense aspect), tone register; output = short verdict → per-fragment critique with natural rewrites → closing ```json block: `{"tags": ["article-missing", ...]}`. The prompt carries two constraints the app cannot enforce for it: **never emit a whole-text rewrite** (decision #18) and **tags come from a fixed vocabulary** (decision #17).
+- **A3.2 — Harness.** Deliverable: `evals/run.sh` — runs one prompt variant across the corpus at a given effort, machine-checks every tag block (parses? all tags in vocabulary? response truncated?), and writes `docs/corpus/results-<variant>-<effort>.md` with the rubric and blank rating columns. Resolves `api_key`/`base_url`/`model` from the app's own `config.json`, so it exercises the A2.1 config contract before `config.rs` exists. Outlives the gate as the regression suite for every later prompt edit.
+- **A3.3 — Corpus.** Deliverable: `docs/corpus/` with 20 real texts (Slack messages, emails, post drafts). Roman supplies these; an agent must not invent them — synthetic texts contain the errors a model already knows how to find, so the gate would pass while telling you nothing. Mix and rationale in `docs/corpus/README.md`.
+- **A3.4 — Iterate.** Deliverable: filled rating column in `docs/corpus/results-*.md`. Read the rubric in the generated sheet *before* the first output — one rater across three iterations will otherwise drift, and downward, exactly when the kill criterion needs a stable standard.
+
+**Exit guardrails — Phase A3 → A1**
+
+| Guardrail | Criteria (pass/fail) | Status | Actual outcome |
+|-----------|----------------------|--------|----------------|
+| Usefulness | ≥ 15/20 corpus outputs rated "useful" by Roman | 🔲 | |
+| Structure | ```json block parses **and every tag is in vocabulary** in 20/20 outputs | 🔲 | automated by `evals/run.sh` |
+| Misteaching | ≤ 2 outputs contain a "wrong item" (diagnostic; recorded per output) | 🔲 | |
+| **Kill criterion** | If < 10/20 after 3 prompt iterations: stop, rethink the product before building any UI | 🔲 | |
+
+---
 
 #### Phase A1 — Scaffold, hotkey, capture
 
@@ -149,35 +190,13 @@ Hotkey fires → text is captured through the pasteboard → streamed to Anthrop
 - **A2.2 — SSE client.** Deliverable: `llm::critique(text, config)` posting to `{base_url}/v1/messages` with `stream: true`, the prompt in the **`system` field** (never concatenated into the user message), emitting `content_block_delta` texts as `critique-delta` events; request holds an `AbortHandle`.
 - **A2.3 — Render.** Deliverable: plain window (not yet a panel) that opens on hotkey, streams markdown, closes on Esc, and aborts the in-flight request on close — no token burn after dismissal.
 
-**Exit guardrails — Phase A2 → A3**
+**Exit guardrails — Phase A2 → Epic B**
 
 | Guardrail | Criteria (pass/fail) | Status | Actual outcome |
 |-----------|----------------------|--------|----------------|
 | Latency | First visible token < 1.5 s p50 over 10 runs | 🔲 | |
 | Abort | Esc mid-stream → request cancelled (verified in logs), window closes | 🔲 | |
 | Config loop | Edit system_prompt in editor → next invocation uses it, no restart | 🔲 | |
-
-#### Phase A3 — Prompt validation gate
-
-| Step | Description | Status | Notes |
-|------|-------------|--------|-------|
-| A3.1 | Draft system prompt v1 (L1-aware critique + variants + tags) | 🔲 | |
-| A3.2 | Corpus: 20 real recent texts by Roman | 🔲 | needs human |
-| A3.3 | Iterate prompt against corpus; record verdicts | 🔲 | needs human |
-
-**Steps (detail):**
-
-- **A3.1 — Prompt.** Deliverable: `prompts/critique.md` (copied into config default). Contract: author's L1 is Russian — hunt calques (articles, prepositions, "possibility to", tense aspect), tone register; output = short verdict → per-fragment critique with natural rewrites → closing ```json block: `{"tags": ["article-abstract-noun", ...]}`.
-- **A3.2 — Corpus.** Deliverable: `docs/corpus/` with 20 real texts (Slack messages, emails, post drafts). Roman supplies these; an agent must not invent them.
-- **A3.3 — Iterate.** Deliverable: verdict table in `docs/corpus/results.md` — per text: useful / water / wrong.
-
-**Exit guardrails — Phase A3 → Epic B**
-
-| Guardrail | Criteria (pass/fail) | Status | Actual outcome |
-|-----------|----------------------|--------|----------------|
-| Usefulness | ≥ 15/20 corpus outputs rated "useful" by Roman | 🔲 | |
-| Structure | ```json block parses in 20/20 outputs | 🔲 | |
-| **Kill criterion** | If < 10/20 after 3 prompt iterations: stop, rethink the product before building any UI | 🔲 | |
 
 ---
 
@@ -291,6 +310,12 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 | 11 | 2026-08-26 | Repo visibility: undecided | No commercial plans stated; all deps MIT/Apache so either way stays open | Roman |
 | 12 | 2026-08-26 | Pace: evenings/weekends | Side project next to full-time work | Roman |
 | 13 | 2026-08-26 | Proceed despite overlap with Apple Intelligence Writing Tools | Apple (macOS 26) covers select→popup→proofread-with-explanations, incl. custom rewrite prompts. Overlap acknowledged; redpen's value is concentrated in never-replace flow, L1-aware naturalness critique, and the error journal — see §1 Positioning. Panel UX itself is commodity | Roman |
+| 14 | 2026-08-26 | Phase A3 runs before A1 and A2 | The kill criterion says "stop before building any UI", but it is unexecutable once A1+A2 exist — sunk cost decides instead. A3 depends on neither; the harness is bash + curl. Reaching the gate costs one evening rather than several weekends | Roman |
+| 15 | 2026-08-26 | Default model `claude-opus-5` | Closes the open question. Critique quality *is* the product, so no downgrade for cost; at personal volume on short texts the difference is rounding error. `model` stays config-driven, so it is a one-line change | Roman |
+| 16 | 2026-08-26 | Latency is tuned with `effort`, never by disabling thinking | On Opus 5 adaptive thinking is on by default and thinking `display` defaults to `"omitted"` — the panel would show a blank card for seconds and fail the A2 guardrail as written. `thinking: {type: "disabled"}` is rejected as the fix: it leaks `<thinking>` tags and can write tool calls into visible text. Use `effort: low`/`medium`. Consequence: A3 must evaluate at the shipping effort, or corpus results do not transfer | Roman |
+| 17 | 2026-08-26 | Tag vocabulary fixed at 20 tags for v1 | Freeform tags make Epic E unaggregatable — "14 article misses this month" needs a stable key. Tags repeat per occurrence rather than dedupe, because frequency is the whole signal. The list lives in the prompt; the harness extracts and validates against it | Roman |
+| 18 | 2026-08-26 | The prompt must never emit a whole-text rewrite | Decision #1 is enforced in the *app* by having no paste path — but the prompt can defeat it unaided: a clean corrected version in the output just gets copied, and the pedagogy is gone. Per-fragment rewrites only | Roman |
+| 19 | 2026-08-26 | Eval harness is bash + curl, and is kept permanently | Reaches the gate with no Rust toolchain, then becomes the prompt regression suite after v1. Rust has no official Anthropic SDK, so raw HTTP is the path in the app too | Roman |
 
 ---
 
@@ -298,9 +323,10 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 
 - [ ] Final app name — `redpen` is a working title
 - [ ] Repo public or private (decision #11 pending)
-- [ ] Default model string for the config template
+- [x] ~~Default model string for the config template~~ → `claude-opus-5`, decision #15
 - [ ] Distribute signed+notarized builds, or personal-use-only from source?
 - [ ] Default hotkey — `⌥⌘E` assumed, unverified against Roman's existing bindings
+- [ ] API key sits in plaintext in `config.json` — accept for v1, or move to Keychain? Interacts with repo visibility and with the hot-reload-in-an-editor workflow (decision #8)
 
 ---
 
