@@ -18,6 +18,7 @@ against real writing before any of the app is worth building.
 | A3.3 corpus | 🔲 **needs 20 real texts** — see `docs/corpus/README.md` |
 | A3.4 iterate + rate | 🔲 blocked on the corpus |
 | A1.1 scaffold | ✅ this repo boots |
+| A1.2 hotkey + tray | ✅ ⌥⌘E fires; tray has Quit / Open Config |
 
 ## Layout
 

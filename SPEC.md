@@ -20,7 +20,10 @@
 
 **Now on:** Epic A → Phase A3 → step A3.4 — run the prompt over the corpus and rate it.
 
-Blocked only on an API key (`ANTHROPIC_API_KEY`, or `api_key` in the app's `config.json`).
+Two prompt versions have been run; the **structure guardrail passes 20/20**, but the
+usefulness half is still unrated, so the gate is open and the kill criterion unevaluated.
+A1.1 and A1.2 are done alongside it — both cheap, neither an investment the gate could not
+still overturn. A1.3 (`capture.rs`) is the first step that would be expensive to throw away.
 
 A1.1 was built ahead of the gate (it is a scaffold, not an investment — the kill criterion
 stays executable). Nothing further in A1/A2 should be built until A3 passes.
@@ -153,14 +156,14 @@ scores as a miss, so a perfect prompt could fail the gate. Decision #22.
 | Step | Description | Status | Notes |
 |------|-------------|--------|-------|
 | A1.1 | Tauri v2 scaffold; main window `"visible": false` in config | ✅ | accessory activation policy + tray icon |
-| A1.2 | Global hotkey registration + menu-bar tray icon (quit, open config) | 🔲 | |
+| A1.2 | Global hotkey registration + menu-bar tray icon (quit, open config) | ✅ | verified by hand: 11 hotkey fires, both menu items |
 | A1.3 | `capture.rs`: snapshot → ⌘C → poll → read → restore | 🔲 | |
 | A1.4 | Manual capture test checklist executed | 🔲 | |
 
 **Steps (detail):**
 
 - **A1.1 — Scaffold.** ✅ Deliverable met: `npm run tauri dev` boots an app with a hidden window and a menu-bar tray icon. Window is created hidden so it can later be converted to a panel *before* first show. Also set here: `ActivationPolicy::Accessory`, so there is no Dock icon, no app menu, and the process never becomes the active application — the premise Epic B rests on. Frontend is Vite + vanilla TS (HMR for the C1 card iteration, no framework weight in a HUD). Tray art is the stock Tauri icon; a menu-bar template image is a C1 job.
-- **A1.2 — Hotkey + tray.** Deliverable: hotkey (default `⌥⌘E`, configurable) fires a Rust handler that logs; tray menu has Quit and Open Config (opens the JSON in the default editor).
+- **A1.2 — Hotkey + tray.** ✅ Deliverable met: `⌥⌘E` (from config, `"Alt+Cmd+E"`) fires a Rust handler that logs; tray menu has Quit and Open Config, which opens the JSON in the default editor. Brings in a minimal `config.rs` — `load()` and `ensure_exists()` only, reading the exact file `evals/run.sh` already writes. **No watcher and no hot reload: that is still A2.1.** `ensure_exists()` is borrowed from A2.1 because Open Config needs a file to open on a clean machine; it writes mode 600.
 - **A1.3 — Capture module.** Deliverable: `capture::selection() -> Result<String, CaptureError>` plus unit tests for the snapshot/restore logic (pasteboard mocked).
   ```rust
   pub fn selection() -> Result<String, CaptureError> {
