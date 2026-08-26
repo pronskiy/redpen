@@ -1,0 +1,7 @@
+.DS_Store
+
+# eval outputs contain real personal writing + API responses
+docs/corpus/*.md
+!docs/corpus/README.md
+docs/corpus/results-*.md
+evals/.out/
