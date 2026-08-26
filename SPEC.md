@@ -157,14 +157,14 @@ scores as a miss, so a perfect prompt could fail the gate. Decision #22.
 |------|-------------|--------|-------|
 | A1.1 | Tauri v2 scaffold; main window `"visible": false` in config | ✅ | accessory activation policy + tray icon |
 | A1.2 | Global hotkey registration + menu-bar tray icon (quit, open config) | ✅ | verified by hand: 11 hotkey fires, both menu items |
-| A1.3 | `capture.rs`: snapshot → ⌘C → poll → read → restore | 🔲 | |
-| A1.4 | Manual capture test checklist executed | 🔲 | |
+| A1.3 | `capture.rs`: snapshot → ⌘C → poll → read → restore | ✅ | 7 unit tests; verified by hand incl. clipboard restore |
+| A1.4 | Manual capture test checklist executed | 🔄 | `docs/manual-tests.md` written; **needs Roman to run it** |
 
 **Steps (detail):**
 
 - **A1.1 — Scaffold.** ✅ Deliverable met: `npm run tauri dev` boots an app with a hidden window and a menu-bar tray icon. Window is created hidden so it can later be converted to a panel *before* first show. Also set here: `ActivationPolicy::Accessory`, so there is no Dock icon, no app menu, and the process never becomes the active application — the premise Epic B rests on. Frontend is Vite + vanilla TS (HMR for the C1 card iteration, no framework weight in a HUD). Tray art is the stock Tauri icon; a menu-bar template image is a C1 job.
 - **A1.2 — Hotkey + tray.** ✅ Deliverable met: `⌥⌘E` (from config, `"Alt+Cmd+E"`) fires a Rust handler that logs; tray menu has Quit and Open Config, which opens the JSON in the default editor. Brings in a minimal `config.rs` — `load()` and `ensure_exists()` only, reading the exact file `evals/run.sh` already writes. **No watcher and no hot reload: that is still A2.1.** `ensure_exists()` is borrowed from A2.1 because Open Config needs a file to open on a clean machine; it writes mode 600.
-- **A1.3 — Capture module.** Deliverable: `capture::selection() -> Result<String, CaptureError>` plus unit tests for the snapshot/restore logic (pasteboard mocked).
+- **A1.3 — Capture module.** ✅ Deliverable met: `capture::selection() -> Result<String, CaptureError>` plus 7 unit tests against a mocked pasteboard, one per battle-scar. The algorithm lives in `capture_with()` with the clipboard, keystroke and all three timings injected, so the scars are testable without a real pasteboard or a 2s wait. Capture runs on its own thread — blocking the hotkey handler for a 2s secure-input timeout would stall the UI and swallow the next press. Release builds log a character count only, never the user's text.
   ```rust
   pub fn selection() -> Result<String, CaptureError> {
       let snapshot = Pasteboard::snapshot();          // all types, not just text

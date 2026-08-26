@@ -1,0 +1,86 @@
+# Manual test matrix — capture (SPEC step A1.4)
+
+`capture.rs` cannot be tested in CI: it needs a real pasteboard, real Accessibility
+permission, and a real app to steal a selection from. The unit tests in `capture.rs` cover
+the *algorithm* against a mock. **This file covers reality, and it is the test artifact.**
+
+Run it with the app up (`npm run tauri dev`) and the log tailing:
+
+```sh
+tail -f /tmp/redpen-dev.log | grep --line-buffered redpen
+```
+
+Select text, press ⌥⌘E, and record what the log printed.
+
+> **Re-run this whole file after every Tauri or plugin bump**, and any time macOS revokes
+> Accessibility permission — which it does on rebuild (see README).
+
+Date run: `__________`  ·  Build: `__________`
+
+## 1. Capture matrix — guardrail A1
+
+Does a selection get captured at all, and does the text come back intact?
+
+| App | Where exactly | Captured? | Text intact? | Notes |
+|-----|---------------|-----------|--------------|-------|
+| Slack | a message in a channel | 🔲 | 🔲 | Electron — the case AX capture fails on, decision #4 |
+| Chrome | a GitHub comment textarea | 🔲 | 🔲 | |
+| Telegram | a chat message | 🔲 | 🔲 | |
+| Mail.app | a draft body | 🔲 | 🔲 | native AppKit control |
+| VS Code | an open editor buffer | 🔲 | 🔲 | Electron again, different text model |
+
+Worth also noting: multi-line selections, text with emoji, and text with curly quotes —
+the corpus is full of all three.
+
+| Edge case | Result | Notes |
+|-----------|--------|-------|
+| Multi-line selection | 🔲 | newlines preserved? |
+| Emoji / non-ASCII | 🔲 | char count in the log should look sane |
+| Very long selection (~5k chars) | 🔲 | any lag? |
+| Nothing selected | 🔲 | expect a clean `nothing was copied` |
+
+## 2. Clipboard integrity — guardrail A1
+
+The truce with clipboard managers. Method: copy a canary, capture something else, paste.
+
+| Check | Result | Notes |
+|-------|--------|-------|
+| Plain text clipboard survives a capture | 🔲 | copy `CANARY`, capture, ⌘V → expect `CANARY` |
+| **Image** clipboard survives a capture | 🔲 | the "all types, not just text" claim |
+| Rich text / RTF survives | 🔲 | copy from Pages or Mail |
+| No fight with Raycast clipboard history | 🔲 | history should not fill with captured selections |
+| No fight with Maccy | 🔲 | if installed |
+
+If a clipboard manager *is* running, the expected behaviour is that redpen **skips** the
+restore rather than fighting it — `changeCount != before + 1`. A clipboard that does *not*
+come back with a manager running is not necessarily a bug; check the history app first.
+
+## 3. Secure input — guardrail A1
+
+macOS blocks synthetic keystrokes while secure input is active. This must fail *fast and
+politely*, never hang.
+
+| Check | Result | Notes |
+|-------|--------|-------|
+| In a password field, ⌥⌘E returns within ~2s | 🔲 | expect `nothing was copied (secure input, or no selection)` |
+| No hang, no beachball | 🔲 | capture runs off the hotkey thread |
+| No crash | 🔲 | |
+| App still works normally afterwards | 🔲 | press ⌥⌘E on real text again |
+
+## 4. Permission behaviour
+
+| Check | Result | Notes |
+|-------|--------|-------|
+| Without Accessibility permission, the error names the fix | ✅ | verified 2026-08-26: `could not send ⌘C: the application does not have the permission to simulate input (check Accessibility permission)` |
+| After granting, capture works without a restart | ✅ | verified 2026-08-26 |
+| After a rebuild, permission state | 🔲 | expected to reset; record what actually happens |
+
+## Outcome
+
+Fill this in before advancing to Phase A2, and copy the verdict into the
+**Exit guardrails — Phase A1 → A2** table in `SPEC.md`.
+
+- Capture matrix: `____ / 5 apps`
+- Clipboard integrity: `pass / fail`
+- Secure input: `pass / fail`
+- Blocking problems found: `__________`
