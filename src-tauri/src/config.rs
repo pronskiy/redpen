@@ -15,6 +15,9 @@ fn default_base_url() -> String { "https://api.anthropic.com".into() }
 fn default_model() -> String { "claude-sonnet-5".into() }   // decision #25
 fn default_effort() -> String { "medium".into() }
 fn default_hotkey() -> String { "Alt+Cmd+E".into() }   // same string evals/run.sh writes
+// Integer points, not f64: `Config` derives `Eq` so that hot reload can compare two loads
+// for equality, and f64 is not `Eq`. Half-point control is not worth losing that.
+fn default_font_size() -> u8 { 15 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
@@ -28,6 +31,9 @@ pub struct Config {
     pub effort: String,
     #[serde(default = "default_hotkey")]
     pub hotkey: String,
+    /// Base size for the card, in points. Everything else scales off it in `rem`.
+    #[serde(default = "default_font_size")]
+    pub font_size: u8,
     #[serde(default)]
     pub system_prompt_path: String,
 }
@@ -40,6 +46,7 @@ impl Default for Config {
             model: default_model(),
             effort: default_effort(),
             hotkey: default_hotkey(),
+            font_size: default_font_size(),
             system_prompt_path: String::new(),
         }
     }
@@ -228,6 +235,7 @@ mod tests {
         assert_eq!(c.api_key, "sk-test");
         assert_eq!(c.model, "claude-sonnet-5", "missing keys must not blank out defaults");
         assert_eq!(c.hotkey, "Alt+Cmd+E");
+        assert_eq!(c.font_size, 15, "an older config without font_size still works");
     }
 
     #[test]

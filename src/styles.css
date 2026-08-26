@@ -5,12 +5,12 @@
 
 :root {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
-  font-size: 13.5px;
+  font-size: 15px;   /* replaced at runtime from config.json */
   line-height: 1.5;
 
   --ink: #1c1c1e;
-  --muted: rgba(60, 60, 67, 0.6);
-  --rule: rgba(60, 60, 67, 0.18);
+  --muted: rgba(48, 48, 54, 0.88);
+  --rule: rgba(60, 60, 67, 0.22);
   --removed: #b03a4a;
   --added: #0a7c3e;
   --error: #c9314a;
@@ -19,8 +19,8 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --ink: #f2f2f7;
-    --muted: rgba(235, 235, 245, 0.6);
-    --rule: rgba(235, 235, 245, 0.18);
+    --muted: rgba(238, 238, 245, 0.82);
+    --rule: rgba(235, 235, 245, 0.22);
     --removed: #ff8fa0;
     --added: #4ade80;
     --error: #ff7a90;
@@ -56,7 +56,7 @@ body {
   padding-bottom: 9px;
   border-bottom: 1px solid var(--rule);
   font-weight: 600;
-  font-size: 13px;
+  font-size: 0.95rem;
 }
 
 .note { margin: 0 0 14px; }
@@ -64,7 +64,7 @@ body {
 .note p { margin: 0; }
 
 .quote {
-  font-size: 14px;
+  font-size: 1rem;
   letter-spacing: -0.005em;
 }
 
@@ -86,7 +86,7 @@ ins {
 .fix {
   margin-top: 2px;
   padding-left: 1.1em;
-  font-size: 12.5px;
+  font-size: 0.9rem;
 }
 
 
@@ -99,7 +99,7 @@ ins {
 
 .tell {
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: 0.9rem;
 }
 
 .fix .tell::before { content: "· "; }
@@ -126,7 +126,7 @@ ins {
   flex: none;
   min-height: 1.1em;
   padding-top: 6px;
-  font-size: 11.5px;
+  font-size: 0.8rem;
   color: var(--muted);
 }
 
@@ -135,7 +135,7 @@ ins {
 button {
   margin-top: 10px;
   font: inherit;
-  font-size: 12.5px;
+  font-size: 0.9rem;
   padding: 5px 12px;
   border: 0;
   border-radius: 6px;

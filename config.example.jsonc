@@ -29,6 +29,11 @@
   // Global hotkey (step A1.2). Unverified against Roman's existing bindings — SPEC §7.
   "hotkey": "Alt+Cmd+E",
 
+  // Base text size of the card, in points. Everything else scales off it, and it hot-reloads
+  // like the rest of this file — edit, save, press the hotkey, no restart. Integer points:
+  // the config type derives Eq so reload can compare loads, and f64 is not Eq.
+  "font_size": 15,
+
   // Path to the system prompt, kept as a real Markdown file you edit in a real editor —
   // which is the entire point of decision #8. A 141-line prompt inlined as an escaped JSON
   // string would be unreadable and uneditable, so it is a path, not a value.

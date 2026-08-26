@@ -59,6 +59,7 @@ bootstrap_config() {
     model: "claude-sonnet-5",
     effort: "low",
     hotkey: "Alt+Cmd+E",
+    font_size: 15,
     system_prompt_path: $pp
   }' > "$CONFIG_JSON" || return 1
   chmod 600 "$CONFIG_JSON"

@@ -175,6 +175,15 @@ function setStatus(text: string, kind: "" | "error" = "") {
   status.dataset.kind = kind;
 }
 
+// Base size comes from config.json and hot-reloads with everything else, so it can be
+// tuned live rather than rebuilt. Everything in the stylesheet is in rem, so setting the
+// root scales the whole card.
+function applyFontSize(px: number) {
+  if (px >= 8 && px <= 40) document.documentElement.style.fontSize = `${px}px`;
+}
+invoke<number>("ui_settings").then(applyFontSize).catch(() => {});
+listen<number>("ui-settings", (e) => applyFontSize(e.payload));
+
 listen("critique-start", () => {
   buffer = "";
   out.innerHTML = "";

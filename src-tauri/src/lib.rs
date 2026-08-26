@@ -31,6 +31,12 @@ fn preview(text: &str) -> String {
 
 /// Dismissing must *abort*, not just hide. A hidden window with a live request keeps
 /// generating tokens you are no longer reading, and billing for them.
+/// The webview asks for this on load — it cannot rely on an event fired before it existed.
+#[tauri::command]
+fn ui_settings(app: tauri::AppHandle) -> u8 {
+    app.state::<ConfigStore>().current().config.font_size
+}
+
 /// C1.4: the onboarding panel's button.
 #[tauri::command]
 fn open_accessibility_settings(app: tauri::AppHandle) {
@@ -51,7 +57,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_nspanel::init())
-        .invoke_handler(tauri::generate_handler![dismiss, open_accessibility_settings])
+        .invoke_handler(tauri::generate_handler![dismiss, open_accessibility_settings, ui_settings])
         .setup(|app| {
             // Accessory policy: no Dock icon, no app menu, and the app never becomes the
             // active application. Epic B rests on this — a regular-policy app steals focus
@@ -185,6 +191,10 @@ pub fn run() {
                 }
                 if old.system_prompt != new.system_prompt {
                     println!("[redpen] prompt reloaded ({} chars)", new.system_prompt.chars().count());
+                }
+                if old.config.font_size != new.config.font_size {
+                    println!("[redpen] font size: {} -> {}", old.config.font_size, new.config.font_size);
+                    let _ = handle.emit("ui-settings", new.config.font_size);
                 }
                 if old.config.api_key != new.config.api_key {
                     println!("[redpen] api key updated");   // never print the key itself
