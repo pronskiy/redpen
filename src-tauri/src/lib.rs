@@ -1,7 +1,9 @@
 mod capture;
 mod config;
+mod llm;
 
 use config::{Config, ConfigStore};
+use llm::InFlight;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::Manager;
@@ -41,6 +43,7 @@ pub fn run() {
             let store = ConfigStore::new(cfg_path.clone());
             let cfg = store.current().config;
             app.manage(store.clone());
+            app.manage(InFlight::default());
 
             // ---- tray ----------------------------------------------------------------
             let icon = app
@@ -86,9 +89,17 @@ pub fn run() {
                         // Off the hotkey thread: capture sleeps ~50ms and can poll for a
                         // full 2s under secure input. Doing that inline would stall the UI
                         // and swallow the next press.
-                        std::thread::spawn(|| match capture::selection() {
+                        let app = _app.clone();
+                        std::thread::spawn(move || match capture::selection() {
                             Ok(text) => {
                                 println!("[redpen] captured {} chars{}", text.chars().count(), preview(&text));
+                                let loaded = app.state::<ConfigStore>().current();
+                                let handle = tauri::async_runtime::spawn(llm::run(
+                                    app.clone(),
+                                    loaded,
+                                    text,
+                                ));
+                                app.state::<InFlight>().set(handle);
                             }
                             Err(e) => eprintln!("[redpen] capture failed: {e}"),
                         });
