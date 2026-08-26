@@ -18,12 +18,15 @@
 
 ### Current focus
 
-**Now on:** Epic A → Phase A3 → step A3.4 — run the prompt over the corpus and rate it.
+**Now on:** Epic A → Phase A2 → step A2.1 — hot reload for `config.rs`.
 
-Two prompt versions have been run; the **structure guardrail passes 20/20**, but the
-usefulness half is still unrated, so the gate is open and the kill criterion unevaluated.
-A1.1 and A1.2 are done alongside it — both cheap, neither an investment the gate could not
-still overturn. A1.3 (`capture.rs`) is the first step that would be expensive to throw away.
+**Phase A1 is complete and its exit guardrails are all green.** `config.rs` already exists
+from A1.2 with `load()` and `ensure_exists()`, so A2.1 is really just the fs watcher.
+
+**Still open: the A3 usefulness guardrail.** Two prompt versions have been run and the
+structure half passes 20/20, but nothing is rated, so the kill criterion has never been
+evaluated. Decision #14 put that gate first precisely so it would be answered before this
+much existed. It is now the only guardrail in Epic A with nothing behind it.
 
 A1.1 was built ahead of the gate (it is a scaffold, not an investment — the kill criterion
 stays executable). Nothing further in A1/A2 should be built until A3 passes.
@@ -158,7 +161,7 @@ scores as a miss, so a perfect prompt could fail the gate. Decision #22.
 | A1.1 | Tauri v2 scaffold; main window `"visible": false` in config | ✅ | accessory activation policy + tray icon |
 | A1.2 | Global hotkey registration + menu-bar tray icon (quit, open config) | ✅ | verified by hand: 11 hotkey fires, both menu items |
 | A1.3 | `capture.rs`: snapshot → ⌘C → poll → read → restore | ✅ | 7 unit tests; verified by hand incl. clipboard restore |
-| A1.4 | Manual capture test checklist executed | 🔄 | `docs/manual-tests.md` written; **needs Roman to run it** |
+| A1.4 | Manual capture test checklist executed | ✅ | `docs/manual-tests.md` filled in — all green |
 
 **Steps (detail):**
 
@@ -185,9 +188,9 @@ scores as a miss, so a perfect prompt could fail the gate. Decision #22.
 
 | Guardrail | Criteria (pass/fail) | Status | Actual outcome |
 |-----------|----------------------|--------|----------------|
-| Capture matrix | Selection captured in Slack, Chrome (GitHub textarea), Telegram, Mail.app, VS Code | 🔲 | |
-| Clipboard integrity | Prior clipboard contents (incl. an image) restored after capture; no fight with Raycast/Maccy clipboard history | 🔲 | |
-| Secure input | In a password field (secure input on): clean timeout error within 2 s, no hang, no crash | 🔲 | |
+| Capture matrix | Selection captured in Slack, Chrome (GitHub textarea), Telegram, Mail.app, VS Code | ✅ | **5/5**, reported by Roman 2026-08-26 |
+| Clipboard integrity | Prior clipboard contents (incl. an image) restored after capture; no fight with Raycast/Maccy clipboard history | ✅ | **pass** for text, image and RTF. An image seeds 9 pasteboard types; all are snapshotted and restored |
+| Secure input | In a password field (secure input on): clean timeout error within 2 s, no hang, no crash | ✅ | **pass** — clean timeout, no hang. Capture runs off the hotkey thread, so the UI stays responsive |
 
 #### Phase A2 — LLM pipeline into an unstyled window
 

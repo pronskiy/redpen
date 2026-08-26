@@ -19,6 +19,8 @@ against real writing before any of the app is worth building.
 | A3.4 iterate + rate | 🔲 blocked on the corpus |
 | A1.1 scaffold | ✅ this repo boots |
 | A1.2 hotkey + tray | ✅ ⌥⌘E fires; tray has Quit / Open Config |
+| A1.3 capture | ✅ 7 unit tests + verified in 5 apps |
+| A1.4 test matrix | ✅ `docs/manual-tests.md`, all green |
 
 ## Layout
 
