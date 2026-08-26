@@ -26,7 +26,7 @@ against real writing before any of the app is worth building.
 | A2.3 render + abort | ✅ **Epic A complete** — hotkey to critique, Esc aborts |
 | B1 panel | ✅ **Epic B complete** — never steals focus |
 | C1.2–C1.4 | ✅ tags hidden, 3 ms to visible, permission onboarding |
-| C1.1 card design | 🔲 **needs a design call** |
+| C1.1 card design | ✅ inline annotation + adaptive vibrancy |
 
 ## Layout
 

@@ -18,9 +18,16 @@
 
 ### Current focus
 
-**Now on:** Epic C → Phase C1 → step C1.1 — vibrancy and the card design. **Needs Roman's design call first.**
+**Now on:** the MVP is code-complete. What remains is **validation, not building.**
 
-C1.2–C1.4 are done. C1.1 is the last build step of the MVP; after it, the dogfood week.
+Every build step of Epics A, B and C is done. Four things are open, and every one needs
+Roman rather than an agent:
+
+1. **A3 usefulness ratings** — two result sheets, blank rating columns. The kill criterion
+   has still never been evaluated.
+2. **Dogfood week** — 7 consecutive days of real use, verdict recorded here.
+3. **Latency** — n=8, median 1363 ms. Two more presses completes the sample.
+4. **Multi-monitor** — never confirmed on a real 2-display setup.
 
 **Epic A is complete.** Hotkey → capture → streamed critique → Esc aborts, end to end. Two
 loose ends carried forward:
@@ -267,14 +274,15 @@ scores as a miss, so a perfect prompt could fail the gate. Decision #22.
 
 | Step | Description | Status | Notes |
 |------|-------------|--------|-------|
-| C1.1 | Vibrancy/translucency (window-vibrancy crate), card design | 🔲 | design call — needs human |
+| C1.1 | Vibrancy/translucency (window-vibrancy crate), card design | ✅ | direction chosen by Roman: inline annotation + adaptive vibrancy |
 | C1.2 | Streaming render polish: highlight fragments, variants layout | ✅ | tag block split in Rust; 6 tests. Fragment/variant *layout* belongs to C1.1 |
 | C1.3 | Panel pre-warm: keep created+hidden, show instantly | ✅ | **3 ms** hotkey → visible |
 | C1.4 | Accessibility-permission onboarding flow | ✅ | implemented; **onboarding screen itself never seen** — permission was already granted |
 
 **Steps (detail):**
 
-- **C1.1 — Card.** Deliverable: HUD-style translucent card; original fragments visually paired with natural rewrites. Roman approves the design direction before implementation detail.
+- **C1.1 — Card.** ✅ Borderless translucent card, `NSVisualEffectMaterial::Popover` so it follows the system light/dark appearance. Roman chose the direction: **inline annotation** for the fragment/rewrite pairing, **adaptive vibrancy** for the treatment.
+  **Layout is chosen per fragment, not globally.** Measured against the corpus, 46% of rewrites change ≤2 words (inline is ideal), 33% change 3–4, and 21% restructure the sentence entirely — where an inline marker would highlight most of the line and explain nothing. So a word-level edit span picks inline or stacked per note. Two smaller calls: the mark is amber rather than red, because half of what redpen flags is grammatically correct English; and the card sets `user-select: none`, since a rewrite you can copy quietly undoes decision #1.
 - **C1.2 — Render.** Deliverable: the trailing ```json block is detected and stripped from the rendered stream (parsed silently for Epic E); user only ever sees prose.
 - **C1.3 — Pre-warm.** Deliverable: webview stays alive hidden; show is repositioning + unhide, no cold WKWebView start on the hot path.
 - **C1.4 — Onboarding.** Deliverable: first-run screen prompting Accessibility permission (`AXIsProcessTrustedWithOptions`) with a note that macOS requires re-granting after app updates.
@@ -355,6 +363,7 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 | 29 | 2026-08-26 | Panel positioning never leaves AppKit screen coordinates | `mouseLocation`, `NSScreen::frame`, `visibleFrame` and `setFrameOrigin` all share one bottom-left, y-up space spanning every display, so containment and clamping are plain comparisons. The "classic two-monitor off-screen bug" the spec warns about comes from mixing that with the top-left y-down space Tauri's `set_position` and the AX APIs use — the flip needs the *primary* screen's height, and taking it from the wrong screen throws the panel a whole display away. Never converting cannot convert wrongly | Roman |
 | 30 | 2026-08-26 | Dismissal uses global NSEvent *monitors*, not a registered Esc shortcut | A non-activating panel never becomes key, so no keystroke reaches the webview and the A2.3 JS listener is permanently dead code (removed, not patched). Registering Esc as a global shortcut was the alternative and was rejected: it would swallow Esc system-wide while the panel is open, breaking vim, dialogs and every modal. A global monitor observes without consuming, so Esc both reaches the source app and dismisses the panel | Roman |
 | 31 | 2026-08-26 | The panel shows *before* capture, not after | Waiting for capture and then the first token put it on screen ~1.4 s after the press against a 300 ms guardrail; showing first measures 3 ms. This is only correct because B1.2 made the panel non-activating — the synthetic ⌘C still lands in the source app. The same change before Epic B would have copied from redpen's own empty window, which is what the old comment in `lib.rs` warned about. Side benefit: capture failures now reach the user instead of only the log | Roman |
+| 32 | 2026-08-26 | The panel's style mask is `empty().nonactivating_panel()`, never `StyleMask::new()` | `StyleMask::new()` is Titled\|Closable\|Miniaturizable\|Resizable. Applying it to a window the config created with `decorations: false` and `transparent: true` is a contradiction AppKit resolves by aborting the process — and because it happens inside an ObjC callback the only symptom is `panic in a function that cannot unwind` with an empty backtrace. Found by bisection (disable vibrancy → still crashed; revert the window flags → started), not by reading stack frames. Borderless is also simply correct for a chromeless card | Roman |
 
 ---
 
