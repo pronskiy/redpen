@@ -20,6 +20,8 @@
 
 **Now on:** Epic C → Phase C1 → step C1.1 — vibrancy and the card design. **Needs Roman's design call first.**
 
+C1.2–C1.4 are done. C1.1 is the last build step of the MVP; after it, the dogfood week.
+
 **Epic A is complete.** Hotkey → capture → streamed critique → Esc aborts, end to end. Two
 loose ends carried forward:
 
@@ -266,9 +268,9 @@ scores as a miss, so a perfect prompt could fail the gate. Decision #22.
 | Step | Description | Status | Notes |
 |------|-------------|--------|-------|
 | C1.1 | Vibrancy/translucency (window-vibrancy crate), card design | 🔲 | design call — needs human |
-| C1.2 | Streaming render polish: highlight fragments, variants layout | 🔲 | |
-| C1.3 | Panel pre-warm: keep created+hidden, show instantly | 🔲 | |
-| C1.4 | Accessibility-permission onboarding flow | 🔲 | |
+| C1.2 | Streaming render polish: highlight fragments, variants layout | ✅ | tag block split in Rust; 6 tests. Fragment/variant *layout* belongs to C1.1 |
+| C1.3 | Panel pre-warm: keep created+hidden, show instantly | ✅ | **3 ms** hotkey → visible |
+| C1.4 | Accessibility-permission onboarding flow | ✅ | implemented; **onboarding screen itself never seen** — permission was already granted |
 
 **Steps (detail):**
 
@@ -281,7 +283,7 @@ scores as a miss, so a perfect prompt could fail the gate. Decision #22.
 
 | Guardrail | Criteria (pass/fail) | Status | Actual outcome |
 |-----------|----------------------|--------|----------------|
-| Speed | Hotkey → visible panel < 300 ms | 🔲 | |
+| Speed | Hotkey → visible panel < 300 ms | ✅ | **3 ms** (n=1, but a 100× margin). The webview is created hidden at startup and never torn down, so showing is a reposition plus `orderFrontRegardless` — no cold WKWebView on the hot path |
 | Dogfood week | 7 consecutive days of real use; Roman's verdict recorded here | 🔲 | |
 
 ---
@@ -352,6 +354,7 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 | 28 | 2026-08-26 | All AppKit calls are dispatched to the main thread inside `panel.rs` | Cost a hard crash (`SIGTRAP`, `"Must only be used from the main thread"`, `-[NSWindow _doOrderWindow:]`): capture deliberately runs on its own thread, and it called `order_front_regardless` straight into AppKit. Tauri's own `window.show()` hides this by dispatching internally; `tauri-nspanel` sends the ObjC message directly, so swapping one for the other silently moved a thread requirement onto the caller. The dispatch now lives behind `panel::show`/`panel::hide` so no call site can reintroduce it | Roman |
 | 29 | 2026-08-26 | Panel positioning never leaves AppKit screen coordinates | `mouseLocation`, `NSScreen::frame`, `visibleFrame` and `setFrameOrigin` all share one bottom-left, y-up space spanning every display, so containment and clamping are plain comparisons. The "classic two-monitor off-screen bug" the spec warns about comes from mixing that with the top-left y-down space Tauri's `set_position` and the AX APIs use — the flip needs the *primary* screen's height, and taking it from the wrong screen throws the panel a whole display away. Never converting cannot convert wrongly | Roman |
 | 30 | 2026-08-26 | Dismissal uses global NSEvent *monitors*, not a registered Esc shortcut | A non-activating panel never becomes key, so no keystroke reaches the webview and the A2.3 JS listener is permanently dead code (removed, not patched). Registering Esc as a global shortcut was the alternative and was rejected: it would swallow Esc system-wide while the panel is open, breaking vim, dialogs and every modal. A global monitor observes without consuming, so Esc both reaches the source app and dismisses the panel | Roman |
+| 31 | 2026-08-26 | The panel shows *before* capture, not after | Waiting for capture and then the first token put it on screen ~1.4 s after the press against a 300 ms guardrail; showing first measures 3 ms. This is only correct because B1.2 made the panel non-activating — the synthetic ⌘C still lands in the source app. The same change before Epic B would have copied from redpen's own empty window, which is what the old comment in `lib.rs` warned about. Side benefit: capture failures now reach the user instead of only the log | Roman |
 
 ---
 
