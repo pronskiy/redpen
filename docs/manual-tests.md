@@ -30,7 +30,9 @@ Does a selection get captured at all, and does the text come back intact?
 | VS Code | an open editor buffer | 🔲 | 🔲 | Electron again, different text model |
 
 Worth also noting: multi-line selections, text with emoji, and text with curly quotes —
-the corpus is full of all three.
+the corpus is full of all three. Fixtures are in `docs/capture-fixtures/`: open one in any
+editor, select all, press ⌥⌘E. The log prints a character count, so compare it against
+`wc -m` on the file.
 
 | Edge case | Result | Notes |
 |-----------|--------|-------|
@@ -43,11 +45,14 @@ the corpus is full of all three.
 
 The truce with clipboard managers. Method: copy a canary, capture something else, paste.
 
+Run `scripts/clipboard-check.sh [text|image|rtf]` — it seeds a canary, waits while you
+capture, then tells you whether the canary survived.
+
 | Check | Result | Notes |
 |-------|--------|-------|
-| Plain text clipboard survives a capture | 🔲 | copy `CANARY`, capture, ⌘V → expect `CANARY` |
-| **Image** clipboard survives a capture | 🔲 | the "all types, not just text" claim |
-| Rich text / RTF survives | 🔲 | copy from Pages or Mail |
+| Plain text clipboard survives a capture | 🔲 | `scripts/clipboard-check.sh text` |
+| **Image** clipboard survives a capture | 🔲 | `scripts/clipboard-check.sh image` — an image seeds 9 pasteboard types, all restored |
+| Rich text / RTF survives | 🔲 | `scripts/clipboard-check.sh rtf` |
 | No fight with Raycast clipboard history | 🔲 | history should not fill with captured selections |
 | No fight with Maccy | 🔲 | if installed |
 
