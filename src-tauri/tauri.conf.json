@@ -15,14 +15,18 @@
       {
         "label": "main",
         "title": "redpen",
-        "width": 460,
-        "height": 320,
-        "visible": false
+        "width": 480,
+        "height": 340,
+        "visible": false,
+        "transparent": true,
+        "decorations": false,
+        "shadow": true
       }
     ],
     "security": {
       "csp": null
-    }
+    },
+    "macOSPrivateApi": true
   },
   "bundle": {
     "active": true,

@@ -48,6 +48,19 @@ pub fn convert(window: &WebviewWindow<Wry>) -> tauri::Result<()> {
             .value(),
     );
 
+    // C1.1: adaptive vibrancy. `Popover` follows the system light/dark appearance, unlike
+    // `HudWindow` which is dark in both. Radius here rather than in CSS: with decorations
+    // off the NSWindow itself needs the corner mask, or the blur renders as a hard square
+    // behind rounded content.
+    if let Err(e) = window_vibrancy::apply_vibrancy(
+        window,
+        window_vibrancy::NSVisualEffectMaterial::Popover,
+        Some(window_vibrancy::NSVisualEffectState::Active),
+        Some(12.0),
+    ) {
+        eprintln!("[redpen] vibrancy unavailable: {e}");
+    }
+
     // Do not vanish when another app becomes active: the whole point is that the source
     // app keeps focus while the panel stays readable.
     panel.set_hides_on_deactivate(false);

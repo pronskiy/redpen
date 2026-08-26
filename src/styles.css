@@ -1,80 +1,136 @@
-/* Deliberately plain. Vibrancy, typography and the fragment/rewrite pairing are C1.1 —
-   styling before the A3 gate passes is the mistake decision #10 exists to prevent. */
+/* C1.1 — the HUD card.
+   The window is transparent and undecorated; the blur comes from NSVisualEffectView
+   (Popover material) applied in panel.rs, so nothing here may paint an opaque background
+   or the vibrancy is hidden behind it. */
+
 :root {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
-  font-size: 14px;
-  line-height: 1.55;
-  color: #1c1c1e;
-  background: #f5f5f7;
-  --quote: #8e8e93;
+  font-size: 13.5px;
+  line-height: 1.5;
+
+  --ink: #1c1c1e;
+  --muted: rgba(60, 60, 67, 0.6);
+  --rule: rgba(60, 60, 67, 0.18);
+  --mark-bg: rgba(255, 159, 10, 0.28);
+  --fix: #0a7c3e;
+  --error: #c9314a;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    color: #f2f2f7;
-    background: #1c1c1e;
-    --quote: #8e8e93;
+    --ink: #f2f2f7;
+    --muted: rgba(235, 235, 245, 0.6);
+    --rule: rgba(235, 235, 245, 0.18);
+    --mark-bg: rgba(255, 179, 64, 0.3);
+    --fix: #4ade80;
+    --error: #ff7a90;
   }
 }
 
-body {
+html, body {
   margin: 0;
-  padding: 16px 18px;
+  height: 100%;
+  background: transparent;   /* let the vibrancy through */
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  cursor: default;
+  user-select: none;         /* reading, not harvesting — decision #1 */
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px 10px;
+  box-sizing: border-box;
 }
 
 #critique {
+  flex: 1;
   overflow-y: auto;
-  max-height: calc(100vh - 60px);
+  scrollbar-width: thin;
 }
 
-#critique > :first-child { margin-top: 0; }
-#critique p { margin: 0 0 0.7em; }
-
-/* The prompt quotes each offending fragment as a blockquote. */
-#critique blockquote {
-  margin: 0.9em 0 0.35em;
-  padding-left: 0.8em;
-  border-left: 2px solid var(--quote);
-  color: var(--quote);
+/* The one-line judgement, set apart from the notes. */
+.verdict {
+  margin: 0 0 12px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--rule);
+  font-weight: 600;
+  font-size: 13px;
 }
 
-#critique pre {
-  overflow-x: auto;
-  padding: 8px 10px;
-  border-radius: 6px;
-  background: rgba(127, 127, 127, 0.14);
-  font-size: 12px;
+.note { margin: 0 0 14px; }
+.note:last-child { margin-bottom: 4px; }
+.note p { margin: 0; }
+
+.quote {
+  font-size: 14px;
+  letter-spacing: -0.005em;
 }
+
+/* The offending span. Warm, not red: this is a tell to notice, not an error to feel bad
+   about — and half of what redpen flags is perfectly correct English. */
+mark {
+  background: var(--mark-bg);
+  color: inherit;
+  padding: 0 2px;
+  border-radius: 3px;
+}
+
+.fix {
+  margin-top: 2px;
+  padding-left: 1.1em;
+  font-size: 12.5px;
+}
+
+.fix strong { color: var(--fix); font-weight: 600; }
+
+.elbow {
+  margin-left: -1.1em;
+  margin-right: 0.35em;
+  color: var(--muted);
+}
+
+.tell {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.fix .tell::before { content: "· "; }
+
+/* Restructures: the quote reads as the thing being replaced, the rewrite as the answer. */
+.stacked .quote {
+  padding-left: 0.7em;
+  border-left: 2px solid var(--rule);
+  color: var(--muted);
+}
+
+.stacked .tell { margin: 4px 0; }
+
+.stacked .native {
+  padding-left: 1.1em;
+  color: var(--fix);
+  font-weight: 500;
+}
+
+.stacked .native .elbow { color: var(--muted); font-weight: 400; }
+
+.alt { color: var(--muted); font-weight: 400; }
 
 #status {
-  min-height: 1.2em;
-  font-size: 12px;
-  opacity: 0.55;
+  flex: none;
+  min-height: 1.1em;
+  padding-top: 6px;
+  font-size: 11.5px;
+  color: var(--muted);
 }
 
-#status[data-kind="error"] {
-  color: #d7263d;
-  opacity: 1;
-}
+#status[data-kind="error"] { color: var(--error); }
 
-@media (prefers-color-scheme: dark) {
-  #status[data-kind="error"] { color: #ff6b6b; }
-}
-
-/* C1.4 onboarding. Still plain — C1.1 is the design pass. */
-#critique h2 {
-  margin: 0 0 0.5em;
-  font-size: 15px;
-  font-weight: 600;
-}
-
-#critique .aside {
-  opacity: 0.6;
-  font-size: 12px;
-}
-
-#critique button {
+button {
+  margin-top: 10px;
   font: inherit;
+  font-size: 12.5px;
   padding: 5px 12px;
   border: 0;
   border-radius: 6px;
@@ -82,4 +138,10 @@ body {
   color: #fff;
 }
 
-#critique button:active { opacity: 0.75; }
+button:active { opacity: 0.75; }
+
+::-webkit-scrollbar { width: 7px; }
+::-webkit-scrollbar-thumb {
+  background: var(--rule);
+  border-radius: 4px;
+}
