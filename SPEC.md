@@ -198,7 +198,7 @@ scores as a miss, so a perfect prompt could fail the gate. Decision #22.
 | Step | Description | Status | Notes |
 |------|-------------|--------|-------|
 | A2.1 | Config loader with hot reload (fs watch) | ✅ | 8 unit tests; reload driven end-to-end |
-| A2.2 | `llm.rs`: SSE client streaming deltas as Tauri events | 🔲 | |
+| A2.2 | `llm.rs`: SSE client streaming deltas as Tauri events | ✅ | 12 parser tests; verified live end-to-end |
 | A2.3 | Webview renders the markdown stream; Esc closes + aborts | 🔲 | |
 
 **Steps (detail):**
@@ -211,7 +211,7 @@ scores as a miss, so a perfect prompt could fail the gate. Decision #22.
 
 | Guardrail | Criteria (pass/fail) | Status | Actual outcome |
 |-----------|----------------------|--------|----------------|
-| Latency | First visible token < 1.5 s p50 over 10 runs | 🔲 | |
+| Latency | First visible token < 1.5 s p50 over 10 runs | 🔄 | `llm.rs` now logs `first token in N ms`. **n=1 so far: 1199 ms** (sonnet-5, effort medium, 82-char input) — under the bar, but one sample is not a p50. Nine more presses fills this in |
 | Abort | Esc mid-stream → request cancelled (verified in logs), window closes | 🔲 | |
 | Config loop | Edit system_prompt in editor → next invocation uses it, no restart | 🔄 | Reload half verified end-to-end 2026-08-26: prompt edit → `prompt reloaded (6073 chars)`, no restart; identical content correctly produced **no** reload; hotkey rebound live `⌥⌘E → ⌥⌘R → ⌥⌘E`; malformed JSON logged and the app stayed up. The *consuming* half needs A2.2 |
 
@@ -340,6 +340,7 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 | 24 | 2026-08-26 | `fallbacks` is gated on the model tier, not sent unconditionally | Verified against the live API: `'claude-sonnet-5' does not support the fallbacks parameter` — it is Opus-5/Fable-5-tier only. The harness now sends the parameter and its beta header only for those models, so switching `model` in config cannot silently 400 every call | Roman |
 | 25 | 2026-08-26 | Default model is `claude-sonnet-5` — reverses #15 | Roman's call after run 1 of the gate. $2/$10 per MTok against Opus 5's $5/$25, on a tool fired dozens of times a day. Two consequences carried forward: this tier rejects `fallbacks` (#24), and the A3 gate now certifies *this* model plus the prompt — switching back to Opus means re-running the corpus, for the same reason effort must match production (#16) | Roman |
 | 26 | 2026-08-26 | Prompt v2 adds a `typo` tag, quarantined from the Epic E digest | Without a bucket for them, typos were being misfiled into *learnable* categories — run 1 tagged the doubled article in "the the build-up" as `article-extra`, which would have shown up in the journal as an article weakness it is not. Tagged for integrity, excluded from the digest: typo frequency is not something to practise. **Measured cost:** the tag reads to the model as licence — it fired in 5/20 outputs and `15-text` lost its correctly-silent verdict to a note about capitalising "i". The "never the only thing you say" cap is advisory and did not hold; v3 must make it mechanical | Roman |
+| 27 | 2026-08-26 | Synthetic shortcuts use raw keycodes, never `Key::Unicode` | `Key::Unicode('c')` resolves the character through the *active keyboard layout*; when that lookup fails — which it does with a non-Latin layout frontmost, and this app is built for a Russian speaker — enigo falls back to keycode 0. `kVK_ANSI_A` **is** 0, so redpen sent ⌘A: the target app selected all, nothing reached the pasteboard, and capture failed looking like secure input. Now `kVK_ANSI_C` (0x08) directly. Note the 7 capture unit tests could not have caught this: they inject the keystroke as a closure, so the one wrong line is never exercised — only the manual matrix covers it | Roman |
 
 ---
 

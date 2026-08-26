@@ -41,6 +41,16 @@ editor, select all, press ⌥⌘E. The log prints a character count, so compare 
 | Very long selection (~5k chars) | ✅ | any lag? |
 | Nothing selected | ✅ | expect a clean `nothing was copied` |
 
+**Keyboard layout matters, and the unit tests cannot see it.** `send_copy()` is injected as a
+closure in the capture tests, so the keystroke itself is never exercised there — a layout bug
+passes every test and fails every real use (decision #27).
+
+| Layout active when pressing ⌥⌘E | Result | Notes |
+|---------------------------------|--------|-------|
+| U.S. / Latin | 🔲 | |
+| Russian (ЙЦУКЕН) | 🔲 | the case that produced ⌘A "select all" before the keycode fix |
+| Any other non-Latin layout you use | 🔲 | |
+
 ## 2. Clipboard integrity — guardrail A1
 
 The truce with clipboard managers. Method: copy a canary, capture something else, paste.

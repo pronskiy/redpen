@@ -165,6 +165,17 @@ mod mac {
 #[cfg(target_os = "macos")]
 pub use mac::MacClipboard;
 
+/// `kVK_ANSI_C` — the *physical* C key, from Carbon's `Events.h`.
+///
+/// It must be the raw keycode, never `Key::Unicode('c')`. That form asks enigo to resolve
+/// the character through the active keyboard layout; when the lookup fails — which it does
+/// whenever a non-Latin layout is frontmost, and this app is built for a Russian speaker —
+/// it falls back to keycode 0. `kVK_ANSI_A` *is* 0, so the app quietly sends ⌘A: the target
+/// app selects all, nothing lands on the pasteboard, and capture times out looking like a
+/// secure-input failure. Keycodes are layout-independent; characters are not.
+#[cfg(target_os = "macos")]
+const KEYCODE_C: u32 = 0x08;
+
 #[cfg(target_os = "macos")]
 fn send_copy() -> Result<(), CaptureError> {
     use enigo::{Direction, Enigo, Key, Keyboard, Settings};
@@ -174,7 +185,7 @@ fn send_copy() -> Result<(), CaptureError> {
         e.key(k, d).map_err(|err| CaptureError::Keystroke(err.to_string()))
     };
     press(&mut enigo, Key::Meta, Direction::Press)?;
-    let hit = press(&mut enigo, Key::Unicode('c'), Direction::Click);
+    let hit = press(&mut enigo, Key::Other(KEYCODE_C), Direction::Click);
     // Release Cmd even if the 'c' failed, or the modifier stays stuck down system-wide.
     let _ = enigo.key(Key::Meta, Direction::Release);
     hit
