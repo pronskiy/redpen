@@ -69,9 +69,14 @@ pub fn convert(window: &WebviewWindow<Wry>) -> tauri::Result<()> {
 /// So the dispatch lives here rather than at the call sites — the hazard belongs to the
 /// module that owns the dependency, not to everyone who uses it.
 pub fn show(app: &AppHandle) {
+    let started = std::time::Instant::now();
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || match handle.get_webview_panel(LABEL) {
-        Ok(panel) => panel.order_front_regardless(),
+        Ok(panel) => {
+            panel.order_front_regardless();
+            // Guardrail C1: hotkey → visible panel < 300 ms.
+            println!("[redpen] panel visible in {} ms", started.elapsed().as_millis());
+        }
         Err(_) => {
             if let Some(window) = handle.get_webview_window(LABEL) {
                 let _ = window.show();

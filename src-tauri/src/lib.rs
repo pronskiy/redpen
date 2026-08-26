@@ -1,3 +1,4 @@
+mod accessibility;
 mod capture;
 mod config;
 mod llm;
@@ -6,6 +7,7 @@ mod panel;
 use config::{Config, ConfigStore};
 use llm::InFlight;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::Emitter;
 use tauri::tray::TrayIconBuilder;
 use tauri::Manager;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
@@ -29,6 +31,14 @@ fn preview(text: &str) -> String {
 
 /// Dismissing must *abort*, not just hide. A hidden window with a live request keeps
 /// generating tokens you are no longer reading, and billing for them.
+/// C1.4: the onboarding panel's button.
+#[tauri::command]
+fn open_accessibility_settings(app: tauri::AppHandle) {
+    if let Err(e) = app.opener().open_url(accessibility::SETTINGS_URL, None::<&str>) {
+        eprintln!("[redpen] could not open Accessibility settings: {e}");
+    }
+}
+
 #[tauri::command]
 fn dismiss(app: tauri::AppHandle) {
     let aborted = app.state::<InFlight>().abort();
@@ -41,7 +51,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_nspanel::init())
-        .invoke_handler(tauri::generate_handler![dismiss])
+        .invoke_handler(tauri::generate_handler![dismiss, open_accessibility_settings])
         .setup(|app| {
             // Accessory policy: no Dock icon, no app menu, and the app never becomes the
             // active application. Epic B rests on this — a regular-policy app steals focus
@@ -102,19 +112,23 @@ pub fn run() {
                         // full 2s under secure input. Doing that inline would stall the UI
                         // and swallow the next press.
                         let app = _app.clone();
+
+                        // C1.3: show up front, not after capture. Waiting for capture *and*
+                        // the first token would put the panel on screen ~1.4 s after the
+                        // press; the C1 guardrail is 300 ms. This is only safe because B1.2
+                        // made the panel non-activating — the synthetic ⌘C still lands in
+                        // the app the user is typing in. Before B1 it would have copied
+                        // from our own empty window.
+                        //
+                        // panel::* hop to the main thread internally; AppKit window calls
+                        // from this thread are a hard crash (decision #28).
+                        panel::position_at_mouse(&app);
+                        panel::show(&app);
+                        let _ = app.emit(llm::EVENT_START, ());
+
                         std::thread::spawn(move || match capture::selection() {
                             Ok(text) => {
                                 println!("[redpen] captured {} chars{}", text.chars().count(), preview(&text));
-                                // Show only *after* the copy has landed. Showing first
-                                // would move focus here and the synthetic ⌘C would target
-                                // our own empty window instead of the user's selection.
-                                //
-                                // panel::show hops to the main thread for us — AppKit
-                                // window ordering from this capture thread is a hard crash.
-                                // Position before showing, or the panel visibly jumps
-                                // from its last spot to the cursor.
-                                panel::position_at_mouse(&app);
-                                panel::show(&app);
                                 let loaded = app.state::<ConfigStore>().current();
                                 let handle = tauri::async_runtime::spawn(llm::run(
                                     app.clone(),
@@ -123,7 +137,12 @@ pub fn run() {
                                 ));
                                 app.state::<InFlight>().set(handle);
                             }
-                            Err(e) => eprintln!("[redpen] capture failed: {e}"),
+                            Err(e) => {
+                                // The panel is already up, so this reaches the user rather
+                                // than only the log.
+                                eprintln!("[redpen] capture failed: {e}");
+                                let _ = app.emit(llm::EVENT_ERROR, e.to_string());
+                            }
                         });
                     })
                     .build(),
@@ -172,6 +191,21 @@ pub fn run() {
                 }
             }) {
                 eprintln!("[redpen] hot reload unavailable: {e}");
+            }
+
+            // C1.4: surface a missing permission at launch, not on the first silent
+            // capture failure.
+            #[cfg(target_os = "macos")]
+            if !accessibility::is_trusted() {
+                println!("[redpen] Accessibility permission missing — showing onboarding");
+                let onboarding = app.handle().clone();
+                std::thread::spawn(move || {
+                    // Let the webview finish loading before asking it to render.
+                    std::thread::sleep(std::time::Duration::from_millis(400));
+                    panel::position_at_mouse(&onboarding);
+                    panel::show(&onboarding);
+                    let _ = onboarding.emit("needs-accessibility", ());
+                });
             }
 
             // The window is created hidden (tauri.conf.json `visible: false`) so it can be

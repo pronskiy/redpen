@@ -20,6 +20,7 @@ pub const EVENT_START: &str = "critique-start";
 pub const EVENT_THINKING: &str = "critique-thinking";
 pub const EVENT_DELTA: &str = "critique-delta";
 pub const EVENT_DONE: &str = "critique-done";
+pub const EVENT_TAGS: &str = "critique-tags";
 pub const EVENT_ERROR: &str = "critique-error";
 
 /// Server-side refusal fallbacks exist only on the Opus 5 / Fable 5 tier. Verified against
@@ -44,6 +45,79 @@ pub fn build_body(model: &str, effort: &str, system_prompt: &str, text: &str) ->
         body["fallbacks"] = json!("default");
     }
     body
+}
+
+/// The response contract is prose followed by a trailing ```json tag block (decision #6).
+/// The user must only ever see the prose — tags are for the Epic E journal.
+///
+/// Splitting here rather than in the renderer means the webview never receives the JSON at
+/// all, and the tags surface in Rust, where Epic E's store will live.
+///
+/// The whole difficulty is that it streams. `"```json"` arrives a character at a time, so a
+/// naive check renders "``" and "```js" for a frame each before they vanish. The fix is to
+/// hold back any tail that *could still become* the fence.
+pub const TAG_FENCE: &str = "```json";
+
+#[derive(Default)]
+pub struct ProseSplitter {
+    pending: String,
+    tags_raw: String,
+    in_tags: bool,
+}
+
+impl ProseSplitter {
+    /// Feed a chunk; get back only the text that is safe to display.
+    pub fn push(&mut self, chunk: &str) -> String {
+        if self.in_tags {
+            self.tags_raw.push_str(chunk);
+            return String::new();
+        }
+        self.pending.push_str(chunk);
+
+        if let Some(i) = self.pending.find(TAG_FENCE) {
+            let prose = self.pending[..i].to_string();
+            self.tags_raw = self.pending[i..].to_string();
+            self.in_tags = true;
+            self.pending.clear();
+            return prose;
+        }
+
+        // Hold back the longest suffix that is still a prefix of the fence.
+        // `is_char_boundary` first: slicing a suffix that lands inside a multi-byte
+        // character panics before the comparison can rule it out. The fence is ASCII, so
+        // such a suffix could never match anyway — but the panic happens first.
+        let hold = (1..=TAG_FENCE.len().min(self.pending.len()))
+            .rev()
+            .find(|&n| {
+                let start = self.pending.len() - n;
+                self.pending.is_char_boundary(start)
+                    && TAG_FENCE.starts_with(&self.pending[start..])
+            })
+            .unwrap_or(0);
+        let cut = self.pending.len() - hold;
+        let out = self.pending[..cut].to_string();
+        self.pending = self.pending[cut..].to_string();
+        out
+    }
+
+    /// Anything still held back was never a fence after all.
+    pub fn finish(&mut self) -> String {
+        std::mem::take(&mut self.pending)
+    }
+
+    /// The `tags` array, if the block arrived and parsed.
+    pub fn tags(&self) -> Option<Vec<String>> {
+        let body = self.tags_raw.trim().strip_prefix(TAG_FENCE)?;
+        let body = body.split("```").next()?;
+        let v: serde_json::Value = serde_json::from_str(body.trim()).ok()?;
+        Some(
+            v.get("tags")?
+                .as_array()?
+                .iter()
+                .filter_map(|t| t.as_str().map(str::to_string))
+                .collect(),
+        )
+    }
 }
 
 /// What a single SSE frame meant to us.
@@ -320,6 +394,7 @@ pub async fn run(app: AppHandle, loaded: Loaded, text: String) {
     let mut stop_reason = String::from("end_turn");
     let mut first_token: Option<std::time::Duration> = None;
     let mut chars = 0usize;
+    let mut splitter = ProseSplitter::default();
 
     while let Some(item) = stream.next().await {
         let bytes = match item {
@@ -329,14 +404,20 @@ pub async fn run(app: AppHandle, loaded: Loaded, text: String) {
         for frame in buf.push_bytes(&bytes) {
             match parse_frame(&frame) {
                 Chunk::Text(t) => {
+                    // C1.2: the trailing tag block never reaches the webview.
+                    let visible = splitter.push(&t);
+                    if visible.is_empty() {
+                        continue;
+                    }
                     if first_token.is_none() {
                         let elapsed = started.elapsed();
                         first_token = Some(elapsed);
-                        // Guardrail A2: first visible token < 1.5 s p50.
+                        // Guardrail A2 measures the first *visible* token, which is why
+                        // this sits after the splitter rather than before it.
                         println!("[redpen] first token in {} ms", elapsed.as_millis());
                     }
-                    chars += t.chars().count();
-                    let _ = app.emit(EVENT_DELTA, t);
+                    chars += visible.chars().count();
+                    let _ = app.emit(EVENT_DELTA, visible);
                 }
                 Chunk::Thinking => { let _ = app.emit(EVENT_THINKING, ()); }
                 Chunk::Done(reason) => stop_reason = reason,
@@ -344,6 +425,18 @@ pub async fn run(app: AppHandle, loaded: Loaded, text: String) {
                 Chunk::Ignore => {}
             }
         }
+    }
+
+    // Anything still held back was never a fence.
+    let tail = splitter.finish();
+    if !tail.is_empty() {
+        chars += tail.chars().count();
+        let _ = app.emit(EVENT_DELTA, tail);
+    }
+    // Parsed but never displayed — Epic E's journal consumes these (decision #6).
+    if let Some(tags) = splitter.tags() {
+        println!("[redpen] tags: [{}]", tags.join(", "));
+        let _ = app.emit(EVENT_TAGS, tags);
     }
 
     if stop_reason == "refusal" {
@@ -355,4 +448,65 @@ pub async fn run(app: AppHandle, loaded: Loaded, text: String) {
         started.elapsed().as_millis()
     );
     let _ = app.emit(EVENT_DONE, stop_reason);
+}
+
+#[cfg(test)]
+mod splitter_tests {
+    use super::*;
+
+    fn feed(chunks: &[&str]) -> (String, Option<Vec<String>>) {
+        let mut s = ProseSplitter::default();
+        let mut out = String::new();
+        for c in chunks {
+            out.push_str(&s.push(c));
+        }
+        out.push_str(&s.finish());
+        (out, s.tags())
+    }
+
+    #[test]
+    fn prose_passes_through_and_tags_are_removed() {
+        let (prose, tags) = feed(&["**Reads as:** off\n\n", "```json\n{\"tags\":[\"preposition\"]}\n```"]);
+        assert_eq!(prose, "**Reads as:** off\n\n");
+        assert_eq!(tags, Some(vec!["preposition".into()]));
+    }
+
+    #[test]
+    fn a_fence_arriving_one_character_at_a_time_never_leaks() {
+        // The streaming case: without hold-back the panel would flash "`", "``", "```js".
+        let mut chunks: Vec<&str> = vec!["done.\n\n"];
+        for c in ["`", "`", "`", "j", "s", "o", "n", "\n", "{\"tags\":[]}", "\n```"] {
+            chunks.push(c);
+        }
+        let (prose, tags) = feed(&chunks);
+        assert_eq!(prose, "done.\n\n", "no part of the fence may ever be displayed");
+        assert_eq!(tags, Some(vec![]));
+    }
+
+    #[test]
+    fn backticks_that_are_not_the_fence_still_render() {
+        let (prose, tags) = feed(&["use `depend on` here\n"]);
+        assert_eq!(prose, "use `depend on` here\n");
+        assert_eq!(tags, None);
+    }
+
+    #[test]
+    fn a_response_with_no_tag_block_loses_nothing() {
+        let (prose, _) = feed(&["**Reads as:** near-native — nothing to flag.\n"]);
+        assert_eq!(prose, "**Reads as:** near-native — nothing to flag.\n");
+    }
+
+    #[test]
+    fn multibyte_prose_is_not_split_mid_character() {
+        // Russian source words and curly quotes ride through the hold-back logic.
+        let (prose, _) = feed(&["Russian ", "зависеть от", " carries the “from” across\n"]);
+        assert_eq!(prose, "Russian зависеть от carries the “from” across\n");
+    }
+
+    #[test]
+    fn a_truncated_tag_block_yields_no_tags_rather_than_garbage() {
+        let (prose, tags) = feed(&["text\n", "```json\n{\"tags\":[\"art"]);
+        assert_eq!(prose, "text\n");
+        assert_eq!(tags, None);
+    }
 }
