@@ -56,7 +56,7 @@ bootstrap_config() {
   jq -n --arg pp "$PWD/prompts/critique.md" '{
     api_key: "",
     base_url: "https://api.anthropic.com",
-    model: "claude-opus-5",
+    model: "claude-sonnet-5",
     effort: "low",
     hotkey: "Alt+Cmd+E",
     system_prompt_path: $pp
@@ -71,7 +71,7 @@ BASE_URL="${ANTHROPIC_BASE_URL:-$(cfg base_url)}"
 [ -n "$BASE_URL" ] || BASE_URL="https://api.anthropic.com"
 BASE_URL="${BASE_URL%/}"
 [ -n "$MODEL" ] || MODEL="$(cfg model)"
-[ -n "$MODEL" ] || MODEL="claude-opus-5"
+[ -n "$MODEL" ] || MODEL="claude-sonnet-5"
 [ -n "$EFFORT" ] || EFFORT="$(cfg effort)"
 [ -n "$EFFORT" ] || EFFORT="low"
 # No -p given: use the prompt the app itself is pointed at, so tuning matches production.

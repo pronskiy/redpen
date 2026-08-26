@@ -59,7 +59,7 @@ Consequence for priorities: the panel (Epics B–C) carries no defensible value 
 | Response contract | Markdown critique + trailing ```json block with error tags | Journal (Epic E) needs structured tags from day one even though the journal ships later. Tags at the *end* so the user reads prose, not streaming JSON |
 | Core principle | **Never insert, replace, or paste anything** | The entire thesis. No paste-back code path exists in this codebase |
 | Caret positioning | Deferred to Epic D via a Swift shim (`swift-rs`) | Raw AX C API from Rust is ~120 lines of unsafe FFI; a `@_cdecl` Swift function is 15 lines. Panel positions at the mouse cursor until then |
-| Model | `claude-opus-5`, adaptive thinking, `output_config.effort: "low"` | Critique quality is the entire product, so no downgrade for cost. Effort — not model tier — is the latency lever; thinking is on by default on Opus 5 and renders as a blank card until it finishes (decision #16) |
+| Model | `claude-sonnet-5`, adaptive thinking, `output_config.effort: "medium"` | Decision #25 (supersedes #15). Effort — not model tier — is the latency lever; thinking is on by default and renders as a blank card until it finishes (decision #16). This tier does not accept `fallbacks` (decision #24) |
 | Tag vocabulary | Fixed 20-tag list, embedded in the prompt itself | Epic E cannot aggregate freeform tags. The harness extracts the list from the prompt and validates every response against it, so there is one source of truth |
 | License hygiene | Read WritingTools for techniques; copy zero lines | WritingTools is GPL-3.0; repo visibility here is undecided, so keep the codebase unencumbered |
 
@@ -321,7 +321,7 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 | 12 | 2026-08-26 | Pace: evenings/weekends | Side project next to full-time work | Roman |
 | 13 | 2026-08-26 | Proceed despite overlap with Apple Intelligence Writing Tools | Apple (macOS 26) covers select→popup→proofread-with-explanations, incl. custom rewrite prompts. Overlap acknowledged; redpen's value is concentrated in never-replace flow, L1-aware naturalness critique, and the error journal — see §1 Positioning. Panel UX itself is commodity | Roman |
 | 14 | 2026-08-26 | Phase A3 runs before A1 and A2 | The kill criterion says "stop before building any UI", but it is unexecutable once A1+A2 exist — sunk cost decides instead. A3 depends on neither; the harness is bash + curl. Reaching the gate costs one evening rather than several weekends | Roman |
-| 15 | 2026-08-26 | Default model `claude-opus-5` | Closes the open question. Critique quality *is* the product, so no downgrade for cost; at personal volume on short texts the difference is rounding error. `model` stays config-driven, so it is a one-line change | Roman |
+| 15 | 2026-08-26 | ~~Default model `claude-opus-5`~~ **— superseded by #25** | Closes the open question. Critique quality *is* the product, so no downgrade for cost; at personal volume on short texts the difference is rounding error. `model` stays config-driven, so it is a one-line change | Roman |
 | 16 | 2026-08-26 | Latency is tuned with `effort`, never by disabling thinking | On Opus 5 adaptive thinking is on by default and thinking `display` defaults to `"omitted"` — the panel would show a blank card for seconds and fail the A2 guardrail as written. `thinking: {type: "disabled"}` is rejected as the fix: it leaks `<thinking>` tags and can write tool calls into visible text. Use `effort: low`/`medium`. Consequence: A3 must evaluate at the shipping effort, or corpus results do not transfer | Roman |
 | 17 | 2026-08-26 | Tag vocabulary fixed at 20 tags for v1 | Freeform tags make Epic E unaggregatable — "14 article misses this month" needs a stable key. Tags repeat per occurrence rather than dedupe, because frequency is the whole signal. The list lives in the prompt; the harness extracts and validates against it | Roman |
 | 18 | 2026-08-26 | The prompt must never emit a whole-text rewrite | Decision #1 is enforced in the *app* by having no paste path — but the prompt can defeat it unaided: a clean corrected version in the output just gets copied, and the pedagogy is gone. Per-fragment rewrites only | Roman |
@@ -331,6 +331,7 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 | 22 | 2026-08-26 | Rubric gains a `correctly-silent` pass label | The corpus turned out to contain several short messages with genuinely nothing to critique. Under useful/water/wrong, correct restraint on those scores as a miss, so a prompt behaving exactly as designed could trip the kill criterion. Silence on a clean text is a pass, not a failure — the bar stays at 15/20 | Roman |
 | 23 | 2026-08-26 | Config references the prompt by path; the live JSON carries no comments | Two corrections to A2.1 as originally written. Inlining a 141-line prompt as an escaped JSON string is unreadable and uneditable, which defeats decision #8's own rationale — so it is `system_prompt_path`, pointing at the repo so no second copy can drift. And a "commented default" is not buildable: JSON has no comments and both `jq` and `serde_json` reject them, verified. The annotated copy is `config.example.jsonc`, which nothing parses | Roman |
 | 24 | 2026-08-26 | `fallbacks` is gated on the model tier, not sent unconditionally | Verified against the live API: `'claude-sonnet-5' does not support the fallbacks parameter` — it is Opus-5/Fable-5-tier only. The harness now sends the parameter and its beta header only for those models, so switching `model` in config cannot silently 400 every call | Roman |
+| 25 | 2026-08-26 | Default model is `claude-sonnet-5` — reverses #15 | Roman's call after run 1 of the gate. $2/$10 per MTok against Opus 5's $5/$25, on a tool fired dozens of times a day. Two consequences carried forward: this tier rejects `fallbacks` (#24), and the A3 gate now certifies *this* model plus the prompt — switching back to Opus means re-running the corpus, for the same reason effort must match production (#16) | Roman |
 
 ---
 
@@ -338,7 +339,7 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 
 - [ ] Final app name — `redpen` is a working title
 - [ ] Repo public or private (decision #11 pending)
-- [x] ~~Default model string for the config template~~ → `claude-opus-5`, decision #15
+- [x] ~~Default model string for the config template~~ → `claude-sonnet-5`, decision #25 (reverses #15)
 - [ ] Distribute signed+notarized builds, or personal-use-only from source?
 - [ ] Default hotkey — `⌥⌘E` assumed, unverified against Roman's existing bindings
 - [ ] API key sits in plaintext in `config.json` — accept for v1, or move to Keychain? Interacts with repo visibility and with the hot-reload-in-an-editor workflow (decision #8)

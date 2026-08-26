@@ -14,7 +14,10 @@
   // Swap for a proxy or an Anthropic-compatible endpoint (decision #7).
   "base_url": "https://api.anthropic.com",
 
-  // Decision #15. Critique quality is the product, so no downgrade for cost.
+  // Decision #25 (supersedes #15). Sonnet 5 — $2/$10 per MTok against Opus 5's $5/$25.
+  // This tier does NOT accept the `fallbacks` parameter; the harness gates on it
+  // automatically (decision #24). The A3 gate certifies THIS model plus the prompt, so
+  // changing it means re-running the corpus.
   "model": "claude-sonnet-5",
 
   // Decision #16: this is the latency lever, NOT the model tier. Thinking is on by default
