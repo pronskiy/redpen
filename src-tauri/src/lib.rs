@@ -111,6 +111,9 @@ pub fn run() {
                                 //
                                 // panel::show hops to the main thread for us — AppKit
                                 // window ordering from this capture thread is a hard crash.
+                                // Position before showing, or the panel visibly jumps
+                                // from its last spot to the cursor.
+                                panel::position_at_mouse(&app);
                                 panel::show(&app);
                                 let loaded = app.state::<ConfigStore>().current();
                                 let handle = tauri::async_runtime::spawn(llm::run(
@@ -183,6 +186,17 @@ pub fn run() {
                 Ok(()) => println!("[redpen] window converted to a non-activating NSPanel"),
                 Err(e) => eprintln!("[redpen] panel conversion failed: {e}"),
             }
+
+            // B1.4: the panel can never become key, so the webview never sees a keystroke.
+            // Dismissal has to be observed at the system level instead.
+            let dismiss_handle = app.handle().clone();
+            panel::install_dismissal(app.handle(), move || {
+                let aborted = dismiss_handle.state::<InFlight>().abort();
+                panel::hide(&dismiss_handle);
+                if aborted {
+                    println!("[redpen] dismissed — request aborted");
+                }
+            });
             println!(
                 "[redpen] main window ready · visible={:?} · config={}",
                 window.is_visible(),

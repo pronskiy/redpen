@@ -1,5 +1,4 @@
 import { listen } from "@tauri-apps/api/event";
-import { invoke } from "@tauri-apps/api/core";
 import { marked } from "marked";
 
 const out = document.querySelector<HTMLElement>("#critique")!;
@@ -52,16 +51,7 @@ listen<string>("critique-done", () => setStatus(""));
 
 listen<string>("critique-error", (e) => setStatus(e.payload, "error"));
 
-// A2.3: dismissing must abort the request, not just hide the window — otherwise tokens keep
-// generating (and billing) after you have stopped looking.
-//
-// This works because the window is still an ordinary focusable window. Once B1 converts it
-// to a non-activating NSPanel it will never be key, so Esc will land in whatever app you
-// were typing in and this listener will stop firing — B1.4 replaces it with a global event
-// monitor. Deliberately not solved early.
-window.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") {
-    e.preventDefault();
-    invoke("dismiss").catch((err) => setStatus(`dismiss failed: ${err}`, "error"));
-  }
-});
+// Dismissal moved to the Rust side in B1.4. The panel is now a non-activating NSPanel and
+// can never become key, so no keydown ever reaches this webview — a listener here would be
+// silent code. Esc, click-outside and app-switch are all observed by NSEvent monitors in
+// panel.rs. The `dismiss` command stays available for a close button in C1.
