@@ -21,6 +21,7 @@ against real writing before any of the app is worth building.
 | A1.2 hotkey + tray | ✅ ⌥⌘E fires; tray has Quit / Open Config |
 | A1.3 capture | ✅ 7 unit tests + verified in 5 apps |
 | A1.4 test matrix | ✅ `docs/manual-tests.md`, all green |
+| A2.1 config + hot reload | ✅ watches config.json and the prompt file |
 
 ## Layout
 

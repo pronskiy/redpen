@@ -1,7 +1,7 @@
 mod capture;
 mod config;
 
-use config::Config;
+use config::{Config, ConfigStore};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::Manager;
@@ -36,8 +36,11 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
-            let cfg = Config::load();
-            let _ = Config::ensure_exists();
+            let cfg_path = Config::path();
+            let _ = Config::ensure_exists(&cfg_path);
+            let store = ConfigStore::new(cfg_path.clone());
+            let cfg = store.current().config;
+            app.manage(store.clone());
 
             // ---- tray ----------------------------------------------------------------
             let icon = app
@@ -59,13 +62,13 @@ pub fn run() {
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "quit" => app.exit(0),
                     "open_config" => {
-                        match Config::ensure_exists() {
-                            Ok(path) => {
-                                if let Err(e) = app.opener().open_path(path.to_string_lossy(), None::<&str>) {
-                                    eprintln!("[redpen] could not open config: {e}");
-                                }
-                            }
-                            Err(e) => eprintln!("[redpen] could not create config: {e}"),
+                        let path = Config::path();
+                        if let Err(e) = Config::ensure_exists(&path) {
+                            eprintln!("[redpen] could not create config: {e}");
+                            return;
+                        }
+                        if let Err(e) = app.opener().open_path(path.to_string_lossy(), None::<&str>) {
+                            eprintln!("[redpen] could not open config: {e}");
                         }
                     }
                     _ => {}
@@ -103,6 +106,39 @@ pub fn run() {
                     "[redpen] hotkey {:?} is not parseable ({e}); expected e.g. \"Alt+Cmd+E\"",
                     cfg.hotkey
                 ),
+            }
+
+            // ---- hot reload ---------------------------------------------------------
+            // Watches config.json *and* the prompt file it points at (decision #23). The
+            // hotkey re-registers live, which is also the visible proof reload works.
+            let handle = app.handle().clone();
+            if let Err(e) = config::watch(store, move |old, new| {
+                if old.config.hotkey != new.config.hotkey {
+                    if let Ok(previous) = old.config.hotkey.parse::<Shortcut>() {
+                        let _ = handle.global_shortcut().unregister(previous);
+                    }
+                    match new.config.hotkey.parse::<Shortcut>() {
+                        Ok(next) => match handle.global_shortcut().register(next) {
+                            Ok(()) => println!("[redpen] hotkey rebound: {} -> {}", old.config.hotkey, new.config.hotkey),
+                            Err(err) => eprintln!("[redpen] could not bind {}: {err}", new.config.hotkey),
+                        },
+                        Err(err) => eprintln!("[redpen] hotkey {:?} is not parseable ({err})", new.config.hotkey),
+                    }
+                }
+                if old.config.model != new.config.model {
+                    println!("[redpen] model: {} -> {}", old.config.model, new.config.model);
+                }
+                if old.config.effort != new.config.effort {
+                    println!("[redpen] effort: {} -> {}", old.config.effort, new.config.effort);
+                }
+                if old.system_prompt != new.system_prompt {
+                    println!("[redpen] prompt reloaded ({} chars)", new.system_prompt.chars().count());
+                }
+                if old.config.api_key != new.config.api_key {
+                    println!("[redpen] api key updated");   // never print the key itself
+                }
+            }) {
+                eprintln!("[redpen] hot reload unavailable: {e}");
             }
 
             // The window is created hidden (tauri.conf.json `visible: false`) so it can be

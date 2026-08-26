@@ -18,10 +18,11 @@
 
 ### Current focus
 
-**Now on:** Epic A → Phase A2 → step A2.1 — hot reload for `config.rs`.
+**Now on:** Epic A → Phase A2 → step A2.2 — `llm.rs`, the streaming SSE client.
 
-**Phase A1 is complete and its exit guardrails are all green.** `config.rs` already exists
-from A1.2 with `load()` and `ensure_exists()`, so A2.1 is really just the fs watcher.
+**Phase A1 is complete and its exit guardrails are all green, and A2.1 is done.** A2.2 has a
+working reference: `evals/run.sh` has been calling `{base_url}/v1/messages` with the same body
+all along — including the model-tier gate on `fallbacks` (decision #24).
 
 **Still open: the A3 usefulness guardrail.** Two prompt versions have been run and the
 structure half passes 20/20, but nothing is rated, so the kill criterion has never been
@@ -196,13 +197,13 @@ scores as a miss, so a perfect prompt could fail the gate. Decision #22.
 
 | Step | Description | Status | Notes |
 |------|-------------|--------|-------|
-| A2.1 | Config loader with hot reload (fs watch) | 🔲 | |
+| A2.1 | Config loader with hot reload (fs watch) | ✅ | 8 unit tests; reload driven end-to-end |
 | A2.2 | `llm.rs`: SSE client streaming deltas as Tauri events | 🔲 | |
 | A2.3 | Webview renders the markdown stream; Esc closes + aborts | 🔲 | |
 
 **Steps (detail):**
 
-- **A2.1 — Config.** Deliverable: `config.rs` reading `{ api_key, base_url, model, effort, hotkey, system_prompt_path }` from Application Support, creating a default on first run, and hot-reloading on change — both the JSON *and* the prompt file it points at. Unit-tested. The shape is already prototyped by `evals/run.sh`, which writes and reads the same file; mirror it rather than reinventing it. Note it is **not** a *commented* default — see decision #23.
+- **A2.1 — Config.** ✅ Deliverable met. `ConfigStore` holds `Loaded { config, system_prompt }` behind an `Arc<RwLock<_>>`; `config::watch` reloads both files live. Two implementation notes worth keeping: it watches the **directories**, not the files, because editors save by writing a temp file and renaming it over the target — a watch on the file follows the old inode and goes silent after the first save. And change detection compares **content**, not events: one save fires several fs events, so the cheap re-read plus a diff is simpler than debouncing and cannot miss a change the way a time window can. Rebinding the hotkey live is the visible proof. A malformed config degrades to defaults and logs, rather than stopping a running app.
 - **A2.2 — SSE client.** Deliverable: `llm::critique(text, config)` posting to `{base_url}/v1/messages` with `stream: true`, the prompt in the **`system` field** (never concatenated into the user message), emitting `content_block_delta` texts as `critique-delta` events; request holds an `AbortHandle`.
 - **A2.3 — Render.** Deliverable: plain window (not yet a panel) that opens on hotkey, streams markdown, closes on Esc, and aborts the in-flight request on close — no token burn after dismissal.
 
@@ -212,7 +213,7 @@ scores as a miss, so a perfect prompt could fail the gate. Decision #22.
 |-----------|----------------------|--------|----------------|
 | Latency | First visible token < 1.5 s p50 over 10 runs | 🔲 | |
 | Abort | Esc mid-stream → request cancelled (verified in logs), window closes | 🔲 | |
-| Config loop | Edit system_prompt in editor → next invocation uses it, no restart | 🔲 | |
+| Config loop | Edit system_prompt in editor → next invocation uses it, no restart | 🔄 | Reload half verified end-to-end 2026-08-26: prompt edit → `prompt reloaded (6073 chars)`, no restart; identical content correctly produced **no** reload; hotkey rebound live `⌥⌘E → ⌥⌘R → ⌥⌘E`; malformed JSON logged and the app stayed up. The *consuming* half needs A2.2 |
 
 ---
 
