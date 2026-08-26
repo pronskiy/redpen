@@ -1,0 +1,34 @@
+// Documentation only — nothing parses this file.
+//
+// The live config is ~/Library/Application Support/redpen/config.json, and it must be
+// STRICT JSON: no comments, no trailing commas. Both jq (the eval harness) and serde_json
+// (the app) reject comments outright, so the commented copy lives here instead.
+//
+// `evals/run.sh` writes the live file on first run with these defaults. Both the harness and
+// the app read it, so there is exactly one place a key or a model can be set.
+{
+  // Anthropic API key. chmod 600 — this is the one secret in the file.
+  // ANTHROPIC_API_KEY in the environment overrides it for a one-off run.
+  "api_key": "",
+
+  // Swap for a proxy or an Anthropic-compatible endpoint (decision #7).
+  "base_url": "https://api.anthropic.com",
+
+  // Decision #15. Critique quality is the product, so no downgrade for cost.
+  "model": "claude-opus-5",
+
+  // Decision #16: this is the latency lever, NOT the model tier. Thinking is on by default
+  // on Opus 5 and its output is hidden, so the panel shows nothing until it finishes —
+  // lower effort, don't disable thinking. Corpus evaluation must run at whatever ships here,
+  // or the ratings don't transfer.  low | medium | high | xhigh | max
+  "effort": "low",
+
+  // Global hotkey (step A1.2). Unverified against Roman's existing bindings — SPEC §7.
+  "hotkey": "Alt+Cmd+E",
+
+  // Path to the system prompt, kept as a real Markdown file you edit in a real editor —
+  // which is the entire point of decision #8. A 141-line prompt inlined as an escaped JSON
+  // string would be unreadable and uneditable, so it is a path, not a value.
+  // Points into the repo, so there is no second copy to drift.
+  "system_prompt_path": "/Users/pronskiy/projects/redpen/prompts/critique.md"
+}

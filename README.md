@@ -31,9 +31,13 @@ src/, index.html       the webview
 
 ## Running the prompt gate
 
-No Rust toolchain needed. Put an API key in `ANTHROPIC_API_KEY`, or in
-`~/Library/Application Support/redpen/config.json` as `{"api_key": "..."}` — the harness
-reads the same config the app will.
+No Rust toolchain needed. The first run writes
+`~/Library/Application Support/redpen/config.json` (mode 600) and tells you where it is; put
+your key in its `api_key` field, or export `ANTHROPIC_API_KEY` for a one-off. The harness and
+the app read that same file, so a key or a model is set in exactly one place.
+
+`config.example.jsonc` documents every field. It is **documentation only** — the live config
+must be strict JSON, because both `jq` and `serde_json` reject comments.
 
 ```sh
 evals/run.sh -n      # what it sees, spends nothing

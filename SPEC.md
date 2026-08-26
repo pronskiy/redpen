@@ -55,7 +55,7 @@ Consequence for priorities: the panel (Epics B–C) carries no defensible value 
 | Text capture | Simulated ⌘C via `enigo` + pasteboard snapshot/restore | Works everywhere ⌘C works, incl. Electron. AX-based capture is patchy exactly in the apps that matter (Slack, browsers). Technique proven by WritingTools |
 | Floating panel | `tauri-nspanel`, **pinned to a commit** | Only way to get a non-activating NSPanel in Tauri. Git-branch dependency → pin. Both focus-stealing paths must be disabled: `canBecomeKeyWindow` override AND the nonactivating style mask |
 | LLM | Anthropic Messages API only, SSE streaming, configurable `base_url` | One provider keeps v1 small; custom base_url gives proxies/compatible endpoints for free. Multi-provider is explicitly out of scope for v1 |
-| Config | JSON at `~/Library/Application Support/redpen/config.json`, hot-reloaded | The system prompt gets edited dozens of times a day during tuning; an editor beats any settings UI |
+| Config | Strict JSON at `~/Library/Application Support/redpen/config.json`, hot-reloaded; the system prompt is a separate Markdown file referenced by `system_prompt_path` | The system prompt gets edited dozens of times a day during tuning; an editor beats any settings UI — and an escaped 141-line JSON string would beat neither. Annotated copy: `config.example.jsonc`, parsed by nothing |
 | Response contract | Markdown critique + trailing ```json block with error tags | Journal (Epic E) needs structured tags from day one even though the journal ships later. Tags at the *end* so the user reads prose, not streaming JSON |
 | Core principle | **Never insert, replace, or paste anything** | The entire thesis. No paste-back code path exists in this codebase |
 | Caret positioning | Deferred to Epic D via a Swift shim (`swift-rs`) | Raw AX C API from Rust is ~120 lines of unsafe FFI; a `@_cdecl` Swift function is 15 lines. Panel positions at the mouse cursor until then |
@@ -196,7 +196,7 @@ scores as a miss, so a perfect prompt could fail the gate. Decision #22.
 
 **Steps (detail):**
 
-- **A2.1 — Config.** Deliverable: `config.rs` reading `{ api_key, base_url, model, system_prompt, hotkey }` from Application Support, creating a commented default on first run, reloading on file change. Unit-tested.
+- **A2.1 — Config.** Deliverable: `config.rs` reading `{ api_key, base_url, model, effort, hotkey, system_prompt_path }` from Application Support, creating a default on first run, and hot-reloading on change — both the JSON *and* the prompt file it points at. Unit-tested. The shape is already prototyped by `evals/run.sh`, which writes and reads the same file; mirror it rather than reinventing it. Note it is **not** a *commented* default — see decision #23.
 - **A2.2 — SSE client.** Deliverable: `llm::critique(text, config)` posting to `{base_url}/v1/messages` with `stream: true`, the prompt in the **`system` field** (never concatenated into the user message), emitting `content_block_delta` texts as `critique-delta` events; request holds an `AbortHandle`.
 - **A2.3 — Render.** Deliverable: plain window (not yet a panel) that opens on hotkey, streams markdown, closes on Esc, and aborts the in-flight request on close — no token burn after dismissal.
 
@@ -329,6 +329,7 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 | 20 | 2026-08-26 | Frontend is Vite + vanilla TypeScript, no framework | Decision #3 bought Tauri for CSS iteration speed; a framework adds weight without helping a single streaming card. Vite gives HMR, which is the part that actually matters for C1 | Roman |
 | 21 | 2026-08-26 | macOS activation policy is `Accessory`, set at scaffold time | Not cosmetic: a regular-policy app activates when its window shows, which would defeat Epic B before it starts. Cheaper to set now than to debug as focus theft later | Roman |
 | 22 | 2026-08-26 | Rubric gains a `correctly-silent` pass label | The corpus turned out to contain several short messages with genuinely nothing to critique. Under useful/water/wrong, correct restraint on those scores as a miss, so a prompt behaving exactly as designed could trip the kill criterion. Silence on a clean text is a pass, not a failure — the bar stays at 15/20 | Roman |
+| 23 | 2026-08-26 | Config references the prompt by path; the live JSON carries no comments | Two corrections to A2.1 as originally written. Inlining a 141-line prompt as an escaped JSON string is unreadable and uneditable, which defeats decision #8's own rationale — so it is `system_prompt_path`, pointing at the repo so no second copy can drift. And a "commented default" is not buildable: JSON has no comments and both `jq` and `serde_json` reject them, verified. The annotated copy is `config.example.jsonc`, which nothing parses | Roman |
 
 ---
 

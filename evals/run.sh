@@ -12,9 +12,9 @@
 #
 set -uo pipefail
 
-PROMPT_FILE="prompts/critique.md"
+PROMPT_FILE=""
 CORPUS_DIR="docs/corpus"
-EFFORT="low"
+EFFORT=""
 MODEL=""
 CONCURRENCY=4
 MAX_TOKENS=16000
@@ -37,7 +37,6 @@ done
 
 command -v jq   >/dev/null || { echo "need jq: brew install jq" >&2; exit 1; }
 command -v curl >/dev/null || { echo "need curl" >&2; exit 1; }
-[ -f "$PROMPT_FILE" ] || { echo "no prompt file: $PROMPT_FILE" >&2; exit 1; }
 
 # ---- config resolution -------------------------------------------------------
 # Same precedence the app will use, and the same file, so tuning here exercises
@@ -46,12 +45,37 @@ cfg() {
   [ -f "$CONFIG_JSON" ] || { echo ""; return; }
   jq -r --arg k "$1" '.[$k] // empty' "$CONFIG_JSON" 2>/dev/null
 }
+# First run: write the config the app will use, rather than making you export a key into
+# every shell. Prototypes what A2.1 does in Rust; `system_prompt_path` points at the repo so
+# there is never a second copy of the prompt to drift out of sync.
+bootstrap_config() {
+  [ -f "$CONFIG_JSON" ] && return 0
+  mkdir -p "$(dirname "$CONFIG_JSON")" || return 1
+  jq -n --arg pp "$PWD/prompts/critique.md" '{
+    api_key: "",
+    base_url: "https://api.anthropic.com",
+    model: "claude-opus-5",
+    effort: "low",
+    hotkey: "Alt+Cmd+E",
+    system_prompt_path: $pp
+  }' > "$CONFIG_JSON" || return 1
+  chmod 600 "$CONFIG_JSON"
+  echo "created $CONFIG_JSON — see config.example.jsonc for what each field means"
+}
+bootstrap_config
+
 API_KEY="${ANTHROPIC_API_KEY:-$(cfg api_key)}"
 BASE_URL="${ANTHROPIC_BASE_URL:-$(cfg base_url)}"
 [ -n "$BASE_URL" ] || BASE_URL="https://api.anthropic.com"
 BASE_URL="${BASE_URL%/}"
 [ -n "$MODEL" ] || MODEL="$(cfg model)"
 [ -n "$MODEL" ] || MODEL="claude-opus-5"
+[ -n "$EFFORT" ] || EFFORT="$(cfg effort)"
+[ -n "$EFFORT" ] || EFFORT="low"
+# No -p given: use the prompt the app itself is pointed at, so tuning matches production.
+[ -n "$PROMPT_FILE" ] || PROMPT_FILE="$(cfg system_prompt_path)"
+[ -n "$PROMPT_FILE" ] || PROMPT_FILE="prompts/critique.md"
+[ -f "$PROMPT_FILE" ] || { echo "no prompt file: $PROMPT_FILE" >&2; exit 1; }
 
 PROMPT_TAG="$(basename "$PROMPT_FILE" .md)"
 OUT_FILE="${OUT_FILE:-$CORPUS_DIR/results-$PROMPT_TAG-$EFFORT.md}"
@@ -82,7 +106,16 @@ if [ "${#CORPUS[@]}" -eq 0 ]; then
   exit 1
 fi
 [ "$DRY_RUN" -eq 1 ] && { printf '%s\n' "${CORPUS[@]}"; exit 0; }
-[ -n "$API_KEY" ] || { echo "no API key: set ANTHROPIC_API_KEY or api_key in $CONFIG_JSON" >&2; exit 1; }
+if [ -z "$API_KEY" ]; then
+  echo >&2
+  echo "No API key yet. Add it to the config the app will also read:" >&2
+  echo >&2
+  echo "  c=\"$CONFIG_JSON\"" >&2
+  echo "  jq '.api_key = \"sk-ant-...\"' \"\$c\" > \"\$c.tmp\" && mv \"\$c.tmp\" \"\$c\"" >&2
+  echo >&2
+  echo "or export ANTHROPIC_API_KEY for a one-off run." >&2
+  exit 1
+fi
 
 mkdir -p "$WORK"
 
