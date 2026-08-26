@@ -123,7 +123,7 @@ Nothing here depends on A1 or A2: corpus evaluation is offline text-in, text-out
 | A3.1 | Draft system prompt v1 (L1-aware critique + variants + tags) | ✅ | `prompts/critique.md` |
 | A3.2 | Eval harness: prompt variant × corpus → rating sheet | ✅ | `evals/run.sh` |
 | A3.3 | Corpus: 20 real recent texts by Roman | ✅ | 20 texts, verbatim, gitignored |
-| A3.4 | Iterate prompt against corpus; record verdicts | 🔲 | needs human |
+| A3.4 | Iterate prompt against corpus; record verdicts | 🔄 | run 1 done; **needs Roman's ratings** |
 
 **Steps (detail):**
 
@@ -137,7 +137,7 @@ Nothing here depends on A1 or A2: corpus evaluation is offline text-in, text-out
 | Guardrail | Criteria (pass/fail) | Status | Actual outcome |
 |-----------|----------------------|--------|----------------|
 | Usefulness | ≥ 15/20 corpus outputs rated "useful" **or "correctly-silent"** by Roman | 🔲 | |
-| Structure | ```json block parses **and every tag is in vocabulary** in 20/20 outputs | 🔲 | automated by `evals/run.sh` |
+| Structure | ```json block parses **and every tag is in vocabulary** in 20/20 outputs | ✅ | **20/20 and 20/20**, `claude-sonnet-5` @ effort `medium`, 2026-08-26. Caveat: 2/20 outputs flagged a fragment without emitting a tag for it, so the issue never reaches the Epic E counts — surfaced as `⚠️ untagged` in the results table, to fix in the next prompt iteration |
 | Misteaching | ≤ 2 outputs contain a "wrong item" (diagnostic; recorded per output) | 🔲 | |
 | **Kill criterion** | If < 10/20 after 3 prompt iterations: stop, rethink the product before building any UI | 🔲 | |
 
@@ -330,6 +330,7 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 | 21 | 2026-08-26 | macOS activation policy is `Accessory`, set at scaffold time | Not cosmetic: a regular-policy app activates when its window shows, which would defeat Epic B before it starts. Cheaper to set now than to debug as focus theft later | Roman |
 | 22 | 2026-08-26 | Rubric gains a `correctly-silent` pass label | The corpus turned out to contain several short messages with genuinely nothing to critique. Under useful/water/wrong, correct restraint on those scores as a miss, so a prompt behaving exactly as designed could trip the kill criterion. Silence on a clean text is a pass, not a failure — the bar stays at 15/20 | Roman |
 | 23 | 2026-08-26 | Config references the prompt by path; the live JSON carries no comments | Two corrections to A2.1 as originally written. Inlining a 141-line prompt as an escaped JSON string is unreadable and uneditable, which defeats decision #8's own rationale — so it is `system_prompt_path`, pointing at the repo so no second copy can drift. And a "commented default" is not buildable: JSON has no comments and both `jq` and `serde_json` reject them, verified. The annotated copy is `config.example.jsonc`, which nothing parses | Roman |
+| 24 | 2026-08-26 | `fallbacks` is gated on the model tier, not sent unconditionally | Verified against the live API: `'claude-sonnet-5' does not support the fallbacks parameter` — it is Opus-5/Fable-5-tier only. The harness now sends the parameter and its beta header only for those models, so switching `model` in config cannot silently 400 every call | Roman |
 
 ---
 

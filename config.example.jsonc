@@ -15,13 +15,13 @@
   "base_url": "https://api.anthropic.com",
 
   // Decision #15. Critique quality is the product, so no downgrade for cost.
-  "model": "claude-opus-5",
+  "model": "claude-sonnet-5",
 
   // Decision #16: this is the latency lever, NOT the model tier. Thinking is on by default
   // on Opus 5 and its output is hidden, so the panel shows nothing until it finishes —
   // lower effort, don't disable thinking. Corpus evaluation must run at whatever ships here,
   // or the ratings don't transfer.  low | medium | high | xhigh | max
-  "effort": "low",
+  "effort": "medium",
 
   // Global hotkey (step A1.2). Unverified against Roman's existing bindings — SPEC §7.
   "hotkey": "Alt+Cmd+E",

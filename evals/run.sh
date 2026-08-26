@@ -19,9 +19,10 @@ MODEL=""
 CONCURRENCY=4
 MAX_TOKENS=16000
 DRY_RUN=0
+REASSEMBLE=0
 CONFIG_JSON="$HOME/Library/Application Support/redpen/config.json"
 
-while getopts "p:c:e:m:j:o:nh" opt; do
+while getopts "p:c:e:m:j:o:nRh" opt; do
   case "$opt" in
     p) PROMPT_FILE="$OPTARG" ;;
     c) CORPUS_DIR="$OPTARG" ;;
@@ -30,6 +31,7 @@ while getopts "p:c:e:m:j:o:nh" opt; do
     j) CONCURRENCY="$OPTARG" ;;
     o) OUT_FILE="$OPTARG" ;;
     n) DRY_RUN=1 ;;
+    R) REASSEMBLE=1 ;;
     h) sed -n '3,12p' "$0"; exit 0 ;;
     *) exit 2 ;;
   esac
@@ -77,6 +79,11 @@ BASE_URL="${BASE_URL%/}"
 [ -n "$PROMPT_FILE" ] || PROMPT_FILE="prompts/critique.md"
 [ -f "$PROMPT_FILE" ] || { echo "no prompt file: $PROMPT_FILE" >&2; exit 1; }
 
+case "$MODEL" in
+  claude-opus-5*|claude-fable-5*|claude-mythos-5*) SUPPORTS_FALLBACKS=1 ;;
+  *) SUPPORTS_FALLBACKS=0 ;;
+esac
+
 PROMPT_TAG="$(basename "$PROMPT_FILE" .md)"
 OUT_FILE="${OUT_FILE:-$CORPUS_DIR/results-$PROMPT_TAG-$EFFORT.md}"
 WORK="evals/.out/$PROMPT_TAG-$EFFORT"
@@ -98,6 +105,7 @@ echo "base_url    $BASE_URL"
 echo "api_key     $([ -n "$API_KEY" ] && echo "resolved (${#API_KEY} chars)" || echo "MISSING")"
 echo "corpus      ${#CORPUS[@]} texts in $CORPUS_DIR"
 echo "vocabulary  $(echo "$VOCAB" | wc -l | tr -d ' ') tags"
+echo "fallbacks   $([ "$SUPPORTS_FALLBACKS" = "1" ] && echo "on (refusal safety net)" || echo "off — $MODEL does not support the parameter")"
 echo "out         $OUT_FILE"
 
 if [ "${#CORPUS[@]}" -eq 0 ]; then
@@ -126,35 +134,39 @@ call_one() {
   out="$WORK/$base"
   started=$(date +%s)
   jq -n --rawfile sys "$PROMPT_FILE" --rawfile txt "$src" \
-        --arg model "$MODEL" --arg effort "$EFFORT" --argjson mt "$MAX_TOKENS" '{
+        --arg model "$MODEL" --arg effort "$EFFORT" --argjson mt "$MAX_TOKENS" \
+        --argjson fb "$SUPPORTS_FALLBACKS" '{
     model: $model,
     max_tokens: $mt,
     system: $sys,
     messages: [{role: "user", content: $txt}],
     thinking: {type: "adaptive"},
-    output_config: {effort: $effort},
-    fallbacks: "default"
-  }' > "$out.req.json"
-  curl -sS --max-time 300 "$BASE_URL/v1/messages" \
-    -H "x-api-key: $API_KEY" \
-    -H "anthropic-version: 2023-06-01" \
-    -H "anthropic-beta: server-side-fallback-2026-07-01" \
-    -H "content-type: application/json" \
+    output_config: {effort: $effort}
+  } + (if $fb == 1 then {fallbacks: "default"} else {} end)' > "$out.req.json"
+  local hdrs=(-H "x-api-key: $API_KEY" -H "anthropic-version: 2023-06-01" -H "content-type: application/json")
+  [ "$SUPPORTS_FALLBACKS" = "1" ] && hdrs+=(-H "anthropic-beta: server-side-fallback-2026-07-01")
+  curl -sS --max-time 300 "$BASE_URL/v1/messages" "${hdrs[@]}" \
     -d @"$out.req.json" > "$out.res.json" 2>"$out.err"
   elapsed=$(( $(date +%s) - started ))
   echo "$elapsed" > "$out.secs"
   printf '  %-28s %3ss\n' "$base" "$elapsed"
 }
 
-echo
-echo "running ${#CORPUS[@]} calls, $CONCURRENCY at a time..."
-i=0
-for src in "${CORPUS[@]}"; do
-  call_one "$src" &
-  i=$((i + 1))
-  [ $((i % CONCURRENCY)) -eq 0 ] && wait
-done
-wait
+if [ "$REASSEMBLE" -eq 1 ]; then
+  echo
+  echo "reassembling from $WORK — no API calls"
+  [ -d "$WORK" ] || { echo "nothing cached at $WORK; run without -R first" >&2; exit 1; }
+else
+  echo
+  echo "running ${#CORPUS[@]} calls, $CONCURRENCY at a time..."
+  i=0
+  for src in "${CORPUS[@]}"; do
+    call_one "$src" &
+    i=$((i + 1))
+    [ $((i % CONCURRENCY)) -eq 0 ] && wait
+  done
+  wait
+fi
 
 # ---- assemble ----------------------------------------------------------------
 # Pull the LAST ```json fence out of the critique — that is the tag block.
@@ -194,8 +206,8 @@ ok_parse=0; ok_vocab=0; total=0; declare -a ROWS=()
   echo
   echo "## Summary"
   echo
-  echo "| # | text | secs | tag block | tags | rating | wrong items |"
-  echo "|---|------|------|-----------|------|--------|-------------|"
+  echo "| # | text | secs | frags | tag block | tags | rating | wrong items |"
+  echo "|---|------|------|-------|-----------|------|--------|-------------|"
 } > "$OUT_FILE"
 
 n=0
@@ -205,7 +217,7 @@ for src in "${CORPUS[@]}"; do
 
   if jq -e '.type == "error"' "$out.res.json" >/dev/null 2>&1; then
     err="$(jq -r '.error.message // "unknown"' "$out.res.json")"
-    echo "| $n | \`$base\` | $secs | ❌ API error | — | | |" >> "$OUT_FILE"
+    echo "| $n | \`$base\` | $secs | — | ❌ API error | — | | |" >> "$OUT_FILE"
     ROWS+=("$n|$base|API ERROR: $err|")
     continue
   fi
@@ -224,10 +236,17 @@ for src in "${CORPUS[@]}"; do
   else
     parse="❌ no parse"; tags="—"
   fi
+  frags="$(grep -c '^> "' "$out.txt" 2>/dev/null)"; frags="${frags:-0}"
+  ntags="$(jq -r '.tags | length' "$out.tags.json" 2>/dev/null)"; ntags="${ntags:-0}"
+  frags_cell="$frags"
+  if [ "$ntags" -lt "$frags" ] 2>/dev/null; then
+    frags_cell="$frags ⚠️"
+    parse="$parse ⚠️ $((frags - ntags)) untagged"
+  fi
   [ "$stop" = "max_tokens" ] && parse="$parse ⚠️ truncated"
   [ "$stop" = "refusal" ] && parse="❌ refusal"
 
-  echo "| $n | \`$base\` | $secs | $parse | $tags | | |" >> "$OUT_FILE"
+  echo "| $n | \`$base\` | $secs | $frags_cell | $parse | $tags | | |" >> "$OUT_FILE"
 done
 
 {
