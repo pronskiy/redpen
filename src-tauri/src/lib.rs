@@ -1,3 +1,4 @@
+mod capture;
 mod config;
 
 use config::Config;
@@ -6,6 +7,22 @@ use tauri::tray::TrayIconBuilder;
 use tauri::Manager;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use tauri_plugin_opener::OpenerExt;
+
+/// Debug builds show a snippet so you can see capture working; release builds never print
+/// the user's writing to a log.
+fn preview(text: &str) -> String {
+    #[cfg(debug_assertions)]
+    {
+        let one_line: String = text.chars().take(60).collect::<String>().replace('\n', " ");
+        let ellipsis = if text.chars().count() > 60 { "…" } else { "" };
+        format!(": {one_line:?}{ellipsis}")
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        let _ = text;
+        String::new()
+    }
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -59,10 +76,19 @@ pub fn run() {
             // A1.2 only logs. A1.3 replaces the body with capture::selection().
             app.handle().plugin(
                 tauri_plugin_global_shortcut::Builder::new()
-                    .with_handler(|_app, shortcut, event| {
-                        if event.state() == ShortcutState::Pressed {
-                            println!("[redpen] hotkey fired: {shortcut:?} — capture is A1.3");
+                    .with_handler(|_app, _shortcut, event| {
+                        if event.state() != ShortcutState::Pressed {
+                            return;
                         }
+                        // Off the hotkey thread: capture sleeps ~50ms and can poll for a
+                        // full 2s under secure input. Doing that inline would stall the UI
+                        // and swallow the next press.
+                        std::thread::spawn(|| match capture::selection() {
+                            Ok(text) => {
+                                println!("[redpen] captured {} chars{}", text.chars().count(), preview(&text));
+                            }
+                            Err(e) => eprintln!("[redpen] capture failed: {e}"),
+                        });
                     })
                     .build(),
             )?;
