@@ -54,21 +54,49 @@ function parse(md: string): { verdict: string; notes: Note[] } {
 const normalize = (w: string) => w.toLowerCase().replace(/[.,!?;:"“”'’]/g, "");
 
 /**
- * Trim the common prefix and suffix; whatever is left is the edit.
+ * Word-level diff by longest common subsequence.
  *
- * The layout hinges on this. Measured against the corpus, 46% of rewrites change one or
- * two words — inline annotation is perfect there. 21% restructure the sentence entirely,
- * where an inline marker would highlight most of the line and explain nothing. So the
- * span width picks the layout instead of one shape being forced on both.
+ * Prefix/suffix trimming was not enough: it reports one contiguous span, so any rewrite
+ * that touches two separate places marks everything between them as changed. LCS keeps
+ * every word that survived — which is the whole point here. Seeing *one* word struck and
+ * *one* added is a rule you can carry to the next message; a wall of green is not.
+ *
+ * Sentence-length inputs, so the O(n·m) table costs nothing.
  */
-function editSpan(a: string, b: string) {
-  const aw = a.split(/\s+/).filter(Boolean);
-  const bw = b.split(/\s+/).filter(Boolean);
-  let s = 0;
-  while (s < aw.length && s < bw.length && normalize(aw[s]) === normalize(bw[s])) s++;
-  let ae = aw.length, be = bw.length;
-  while (ae > s && be > s && normalize(aw[ae - 1]) === normalize(bw[be - 1])) { ae--; be--; }
-  return { aw, bw, s, ae, be, changed: Math.max(ae - s, be - s) };
+function wordDiff(a: string[], b: string[]) {
+  const n = a.length, m = b.length;
+  const dp: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i][j] = normalize(a[i]) === normalize(b[j])
+        ? dp[i + 1][j + 1] + 1
+        : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+  const kept: boolean[] = new Array(n).fill(false);
+  const added: boolean[] = new Array(m).fill(true);
+  let i = 0, j = 0, changed = 0;
+  while (i < n && j < m) {
+    if (normalize(a[i]) === normalize(b[j])) { kept[i] = true; added[j] = false; i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) { i++; changed++; }
+    else { j++; changed++; }
+  }
+  changed += (n - i) + (m - j);
+  return { kept, added, changed };
+}
+
+/** Struck-through where a word was dropped, plain everywhere else. */
+function markRemoved(words: string[], kept: boolean[]): string {
+  return words
+    .map((w, i) => (kept[i] ? esc(w) : `<del>${esc(w)}</del>`))
+    .join(" ");
+}
+
+/** Green only on what is genuinely new — everything you already had stays neutral. */
+function markAdded(words: string[], added: boolean[]): string {
+  return words
+    .map((w, i) => (added[i] ? `<ins>${esc(w)}</ins>` : esc(w)))
+    .join(" ");
 }
 
 const INLINE_MAX_WORDS = 2;
@@ -78,27 +106,37 @@ function renderNote(note: Note): string {
   const alt = note.natives[1];
   const altHtml = alt ? ` <span class="alt">or “${esc(alt)}”</span>` : "";
 
-  if (native) {
-    const d = editSpan(note.quote, native);
-    if (d.changed > 0 && d.changed <= INLINE_MAX_WORDS) {
-      const before = d.aw.slice(0, d.s).join(" ");
-      const hit = d.aw.slice(d.s, d.ae).join(" ");
-      const after = d.aw.slice(d.ae).join(" ");
-      const fix = d.bw.slice(d.s, d.be).join(" ");
-      return `
-        <div class="note inline">
-          <p class="quote">${esc(before)} <mark>${esc(hit)}</mark> ${esc(after)}</p>
-          <p class="fix"><span class="elbow">└</span> <strong>${esc(fix || "—")}</strong>
-             <span class="tell">${esc(note.tell)}</span>${altHtml}</p>
-        </div>`;
-    }
+  if (!native) {
+    return `
+      <div class="note stacked">
+        <p class="quote">${esc(note.quote)}</p>
+        <p class="tell">${esc(note.tell)}</p>
+      </div>`;
   }
-  // Restructured: show it whole, because there is no single word to point at.
+
+  const aw = note.quote.split(/\s+/).filter(Boolean);
+  const bw = native.split(/\s+/).filter(Boolean);
+  const d = wordDiff(aw, bw);
+  const removedHtml = markRemoved(aw, d.kept);
+  const addedHtml = markAdded(bw, d.added);
+
+  // A tight edit gets the compact form: the line, then just the replacement hanging off it.
+  if (d.changed > 0 && d.changed <= INLINE_MAX_WORDS) {
+    const fix = bw.filter((_, i) => d.added[i]).join(" ");
+    return `
+      <div class="note inline">
+        <p class="quote">${removedHtml}</p>
+        <p class="fix"><span class="elbow">└</span> <ins>${esc(fix || "—")}</ins>
+           <span class="tell">${esc(note.tell)}</span>${altHtml}</p>
+      </div>`;
+  }
+
+  // A restructure needs the whole rewrite — but still only the new words in green.
   return `
     <div class="note stacked">
-      <p class="quote">${esc(note.quote)}</p>
+      <p class="quote">${removedHtml}</p>
       <p class="tell">${esc(note.tell)}</p>
-      ${native ? `<p class="native"><span class="elbow">→</span> ${esc(native)}${altHtml}</p>` : ""}
+      <p class="native"><span class="elbow">→</span> ${addedHtml}${altHtml}</p>
     </div>`;
 }
 

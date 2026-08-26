@@ -11,8 +11,8 @@
   --ink: #1c1c1e;
   --muted: rgba(60, 60, 67, 0.6);
   --rule: rgba(60, 60, 67, 0.18);
-  --mark-bg: rgba(255, 159, 10, 0.28);
-  --fix: #0a7c3e;
+  --removed: #b03a4a;
+  --added: #0a7c3e;
   --error: #c9314a;
 }
 
@@ -21,8 +21,8 @@
     --ink: #f2f2f7;
     --muted: rgba(235, 235, 245, 0.6);
     --rule: rgba(235, 235, 245, 0.18);
-    --mark-bg: rgba(255, 179, 64, 0.3);
-    --fix: #4ade80;
+    --removed: #ff8fa0;
+    --added: #4ade80;
     --error: #ff7a90;
   }
 }
@@ -68,13 +68,19 @@ body {
   letter-spacing: -0.005em;
 }
 
-/* The offending span. Warm, not red: this is a tell to notice, not an error to feel bad
-   about — and half of what redpen flags is perfectly correct English. */
-mark {
-  background: var(--mark-bg);
-  color: inherit;
-  padding: 0 2px;
-  border-radius: 3px;
+/* Only what actually changed is coloured. Everything you already had right stays in the
+   normal ink — a wall of green tells you nothing about what to fix. */
+del {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  text-decoration-color: var(--removed);
+  color: var(--removed);
+}
+
+ins {
+  text-decoration: none;
+  color: var(--added);
+  font-weight: 600;
 }
 
 .fix {
@@ -83,7 +89,7 @@ mark {
   font-size: 12.5px;
 }
 
-.fix strong { color: var(--fix); font-weight: 600; }
+
 
 .elbow {
   margin-left: -1.1em;
@@ -107,10 +113,9 @@ mark {
 
 .stacked .tell { margin: 4px 0; }
 
+/* The rewrite reads in normal ink; only the <ins> words carry colour. */
 .stacked .native {
   padding-left: 1.1em;
-  color: var(--fix);
-  font-weight: 500;
 }
 
 .stacked .native .elbow { color: var(--muted); font-weight: 400; }
