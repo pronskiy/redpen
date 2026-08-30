@@ -57,11 +57,15 @@ pub fn convert(window: &WebviewWindow<Wry>) -> tauri::Result<()> {
     // `HudWindow` which is dark in both. Radius here rather than in CSS: with decorations
     // off the NSWindow itself needs the corner mask, or the blur renders as a hard square
     // behind rounded content.
+    //
+    // 18 is measured off a real Writing Tools panel, not chosen. It is also duplicated as
+    // `--card-radius` in styles.css, which draws the card's hairline edge along the same
+    // curve — the blur ends where the border is drawn only while the two numbers agree.
     if let Err(e) = window_vibrancy::apply_vibrancy(
         window,
         window_vibrancy::NSVisualEffectMaterial::Popover,
         Some(window_vibrancy::NSVisualEffectState::Active),
-        Some(12.0),
+        Some(18.0),
     ) {
         eprintln!("[redpen] vibrancy unavailable: {e}");
     }

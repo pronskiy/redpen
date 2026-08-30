@@ -1,16 +1,33 @@
 /* C1.1 — the HUD card.
    The window is transparent and undecorated; the blur comes from NSVisualEffectView
    (Popover material) applied in panel.rs, so nothing here may paint an opaque background
-   or the vibrancy is hidden behind it. */
+   or the vibrancy is hidden behind it.
+
+   Geometry is measured off a real Writing Tools panel rather than guessed: 18pt corner,
+   0.5pt edge, 18pt padding, and dividers that run the full width of the card. */
 
 :root {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
   font-size: 15px;   /* replaced at runtime from config.json */
   line-height: 1.5;
 
+  /* Points, never rem: the same corner is cut a second time by the NSVisualEffectView mask
+     in panel.rs, which knows nothing about the configured font size. The two must agree or
+     the border traces one curve and the blur ends on another. */
+  --card-radius: 18px;
+  --pad: 18px;
+
   --ink: #1c1c1e;
   --muted: rgba(48, 48, 54, 0.88);
   --rule: rgba(60, 60, 67, 0.22);
+  /* Far lighter than --rule. A divider spanning the whole card carries much more weight
+     than a 2px bar beside a quote, so the two cannot share a value: matched to --rule the
+     card reads as a stack of boxes; matched to --separator the quote bar disappears. */
+  --separator: rgba(0, 0, 0, 0.06);
+  --stroke: rgba(0, 0, 0, 0.2);
+  --control: rgba(0, 0, 0, 0.055);
+  --control-edge: rgba(0, 0, 0, 0.06);
+  --control-active: rgba(0, 0, 0, 0.11);
   --removed: #b03a4a;
   --added: #0a7c3e;
   --error: #c9314a;
@@ -21,6 +38,11 @@
     --ink: #f2f2f7;
     --muted: rgba(238, 238, 245, 0.82);
     --rule: rgba(235, 235, 245, 0.22);
+    --separator: rgba(255, 255, 255, 0.09);
+    --stroke: rgba(255, 255, 255, 0.15);
+    --control: rgba(255, 255, 255, 0.1);
+    --control-edge: rgba(255, 255, 255, 0.08);
+    --control-active: rgba(255, 255, 255, 0.18);
     --removed: #ff8fa0;
     --added: #4ade80;
     --error: #ff7a90;
@@ -40,21 +62,33 @@ html, body {
 body {
   display: flex;
   flex-direction: column;
-  padding: 14px 16px 10px;
   box-sizing: border-box;
+
+  /* The card's own edge. Drawn here rather than left to the window because a transparent
+     borderless NSWindow has nothing to draw one with — the blur simply stops. `overflow:
+     hidden` is what makes the radius clip the content, so a note scrolling past the top
+     corner is cut by the curve instead of squaring it off. */
+  padding: 0;
+  overflow: hidden;
+  border: 0.5px solid var(--stroke);
+  border-radius: var(--card-radius);
 }
 
 #critique {
   flex: 1;
+  padding: var(--pad);
   overflow-y: auto;
+  overflow-x: hidden;
   scrollbar-width: thin;
 }
 
-/* The one-line judgement, set apart from the notes. */
+/* The one-line judgement, set apart from the notes. The negative margins pull it back out
+   to the card edge so its rule runs the full width — an inset rule reads as a box drawn
+   around the text, which is exactly what the native panel avoids. */
 .verdict {
-  margin: 0 0 12px;
-  padding-bottom: 9px;
-  border-bottom: 1px solid var(--rule);
+  margin: calc(-1 * var(--pad)) calc(-1 * var(--pad)) var(--pad);
+  padding: 9px var(--pad);
+  border-bottom: 1px solid var(--separator);
   font-weight: 600;
   font-size: 0.95rem;
 }
@@ -122,28 +156,37 @@ ins {
 
 .alt { color: var(--muted); font-weight: 400; }
 
+/* Idle, the footer is nothing but the card's bottom padding — #critique already supplies
+   it, so an empty status adds no height. */
 #status {
   flex: none;
-  min-height: 1.1em;
-  padding-top: 6px;
+  padding: 0 var(--pad);
   font-size: 0.8rem;
   color: var(--muted);
+}
+
+/* The rule only appears with something under it. A hairline above an empty band reads as
+   a half-drawn card. */
+#status:not(:empty) {
+  padding: 10px var(--pad) 12px;
+  border-top: 1px solid var(--separator);
 }
 
 #status[data-kind="error"] { color: var(--error); }
 
 button {
-  margin-top: 10px;
+  margin-top: 12px;
   font: inherit;
-  font-size: 0.9rem;
-  padding: 5px 12px;
-  border: 0;
-  border-radius: 6px;
-  background: #0a84ff;
-  color: #fff;
+  font-size: 0.85rem;
+  line-height: 1.15;
+  padding: 2px 10px;
+  border: 0.5px solid var(--control-edge);
+  border-radius: 5px;
+  background: var(--control);
+  color: var(--ink);
 }
 
-button:active { opacity: 0.75; }
+button:active { background: var(--control-active); }
 
 ::-webkit-scrollbar { width: 7px; }
 ::-webkit-scrollbar-thumb {
