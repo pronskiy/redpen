@@ -97,7 +97,7 @@ body {
    `<div class="note stacked">` outside any list, and must keep the full width. */
 .notes {
   margin: 0;
-  padding-left: 1.5em;   /* the gutter the numbers hang in */
+  padding-left: 1.2em;   /* the gutter the numbers hang in */
 }
 
 /* Native <ol> markers rather than a counter on an absolutely-positioned ::before — the
@@ -108,6 +108,11 @@ body {
   font-size: 0.85rem;
   font-variant-numeric: tabular-nums;
 }
+
+/* Wider than the 14px between the paragraphs *inside* a note, so the gap between two
+   issues reads as bigger than the gap between a quote and its own rewrite. Scoped to the
+   list: the onboarding screen's lone note is not competing with anything. */
+.notes > .note:not(:last-child) { margin-bottom: 20px; }
 
 .note { margin: 0 0 14px; }
 .note:last-child { margin-bottom: 4px; }
