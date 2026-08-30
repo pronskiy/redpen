@@ -346,7 +346,7 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 | 8 | 2026-08-26 | Config = JSON file, no settings UI in MVP | Prompt tuning happens in an editor many times a day | Roman |
 | 9 | 2026-08-26 | Caret positioning via Swift shim (swift-rs), deferred to v1.1 | AX is a C API; ~120 lines of unsafe Rust FFI vs 15 lines of Swift; mouse position is good enough for MVP | Roman |
 | 10 | 2026-08-26 | Ugly-first build order: pipeline+prompt before any styling | The risky unknown is critique quality, not the panel | Roman |
-| 11 | 2026-08-26 | Repo visibility: undecided | No commercial plans stated; all deps MIT/Apache so either way stays open | Roman |
+| 11 | 2026-08-26 | ~~Repo visibility: undecided~~ **— superseded by #34** | No commercial plans stated; all deps MIT/Apache so either way stays open | Roman |
 | 12 | 2026-08-26 | Pace: evenings/weekends | Side project next to full-time work | Roman |
 | 13 | 2026-08-26 | Proceed despite overlap with Apple Intelligence Writing Tools | Apple (macOS 26) covers select→popup→proofread-with-explanations, incl. custom rewrite prompts. Overlap acknowledged; redpen's value is concentrated in never-replace flow, L1-aware naturalness critique, and the error journal — see §1 Positioning. Panel UX itself is commodity | Roman |
 | 14 | 2026-08-26 | Phase A3 runs before A1 and A2 | The kill criterion says "stop before building any UI", but it is unexecutable once A1+A2 exist — sunk cost decides instead. A3 depends on neither; the harness is bash + curl. Reaching the gate costs one evening rather than several weekends | Roman |
@@ -369,13 +369,14 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 | 31 | 2026-08-26 | The panel shows *before* capture, not after | Waiting for capture and then the first token put it on screen ~1.4 s after the press against a 300 ms guardrail; showing first measures 3 ms. This is only correct because B1.2 made the panel non-activating — the synthetic ⌘C still lands in the source app. The same change before Epic B would have copied from redpen's own empty window, which is what the old comment in `lib.rs` warned about. Side benefit: capture failures now reach the user instead of only the log | Roman |
 | 32 | 2026-08-26 | The panel's style mask is `empty().nonactivating_panel()`, never `StyleMask::new()` | `StyleMask::new()` is Titled\|Closable\|Miniaturizable\|Resizable. Applying it to a window the config created with `decorations: false` and `transparent: true` is a contradiction AppKit resolves by aborting the process — and because it happens inside an ObjC callback the only symptom is `panic in a function that cannot unwind` with an empty backtrace. Found by bisection (disable vibrancy → still crashed; revert the window flags → started), not by reading stack frames. Borderless is also simply correct for a chromeless card | Roman |
 | 33 | 2026-08-28 | The icon settles amber vs crimson in favour of crimson, and ships as two separate drawings | C1.1 recorded a call for an amber mark that never reached code — `--removed` has been `#b03a4a` since the card was built, so SPEC and CSS had quietly drifted. Roman's call: the shipped colour wins. The app is *named* redpen, and an icon that previews the card has to use the card's own palette. Second half: the bundle icon and the menu-bar glyph cannot be one piece of art. A macOS template image is pure black plus alpha so the system can recolour it per appearance — reusing the colour icon there (which is what the scaffold did) draws it as-is and looks wrong in both light and dark bars. Verified by building each mark and looking at it: a full `└` elbow, legible in the card, reads as a capital **L** at menu-bar size, so the glyph is a different composition rather than a scaled-down copy | Roman |
+| 34 | 2026-08-30 | Repo is public; CI on macOS runners, releases minisign-signed only | Resolves #11. Public makes the macOS runners free, which matters because the crate cannot build anywhere else — `mod panel;` is unconditional and tauri-nspanel/objc2/enigo are macOS-only. History was audited before the call: no key, no corpus, only the deliberately un-ignored `docs/corpus/README.md`. Signing means the **updater** key, not Apple: without a Developer ID the bundle stays ad-hoc, Gatekeeper still warns, and an update still costs the Accessibility grant — so the open question below stays open | Roman |
 
 ---
 
 ## 7. Open questions
 
 - [ ] Final app name — `redpen` is a working title
-- [ ] Repo public or private (decision #11 pending)
+- [x] ~~Repo public or private~~ → public, decision #34
 - [x] ~~Default model string for the config template~~ → `claude-sonnet-5`, decision #25 (reverses #15)
 - [ ] Distribute signed+notarized builds, or personal-use-only from source?
 - [ ] Default hotkey — `⌥⌘E` assumed, unverified against Roman's existing bindings

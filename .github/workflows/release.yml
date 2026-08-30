@@ -1,0 +1,77 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  # Three files carry the version and they drift silently. A mismatch is not cosmetic —
+  # the updater compares the running version against the manifest, so a bundle built from
+  # the wrong number either offers an update that is already installed or hides a real
+  # one. Five seconds on ubuntu beats finding out after a ten-minute universal build.
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tag must match every declared version
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          conf=$(jq -r .version src-tauri/tauri.conf.json)
+          pkg=$(jq -r .version package.json)
+          crate=$(grep -m1 '^version = ' src-tauri/Cargo.toml | cut -d'"' -f2)
+          echo "tag=$tag  tauri.conf.json=$conf  package.json=$pkg  Cargo.toml=$crate"
+          status=0
+          for pair in "tauri.conf.json:$conf" "package.json:$pkg" "Cargo.toml:$crate"; do
+            if [ "${pair#*:}" != "$tag" ]; then
+              echo "::error::${pair%%:*} says ${pair#*:}, but the tag is $tag"
+              status=1
+            fi
+          done
+          exit $status
+
+  build:
+    needs: guard
+    runs-on: macos-latest
+    permissions:
+      contents: write # tauri-action creates the draft release and uploads to it
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          # Both halves of the universal binary.
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      # tauri.conf.json's beforeBuildCommand runs `npm run build`, so the frontend is
+      # built by this step rather than a separate one.
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Signs redpen.app.tar.gz with the minisign key so the updater will accept it.
+          # This is *not* Apple code signing — Gatekeeper still sees an ad-hoc bundle, and
+          # installing an update still costs the Accessibility grant. See update.rs.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: redpen __VERSION__
+          # Draft on purpose. GitHub does not serve /releases/latest/download for a draft,
+          # so the endpoint in config.json stays dark until you press publish — tagging
+          # and shipping stay two separate acts.
+          releaseDraft: true
+          prerelease: false
+          args: --target universal-apple-darwin

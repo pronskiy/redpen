@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# macOS runners are the slow half of this, so a new push should abandon the run it
+# supersedes rather than queue behind it.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    # macOS only, and not as a convenience: `mod panel;` is unconditional in lib.rs and
+    # tauri-nspanel / objc2 / enigo are macOS-only dependencies, so the crate genuinely
+    # does not compile on another runner. The repo is public, so these minutes are free.
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      # Cheapest first: a type error should not wait behind a cold Rust build.
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      # Clippy is clean today, so -D warnings costs nothing and keeps it that way.
+      #
+      # There is deliberately no `cargo fmt --check` here. The tree differs from rustfmt in
+      # 61 places because it is hand-formatted — aligned trailing comments, single-line
+      # match arms, the dense explanatory blocks. Adding the gate would mean either a red
+      # CI from day one or a reformat commit that flattens all of it.
+      - name: Clippy
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
