@@ -315,6 +315,7 @@ mod tests {
 use crate::config::Loaded;
 use futures_util::StreamExt;
 use std::sync::Mutex;
+use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
 /// Holds the running request so it can be killed. Dropping the task drops the response
@@ -343,6 +344,46 @@ impl InFlight {
     }
 }
 
+/// How long to wait for the TCP/TLS handshake before giving up on the endpoint.
+///
+/// There has to be a bound. `reqwest` defaults to none, and an endpoint that blackholes
+/// packets rather than refusing them — a VPN that just dropped, a dead proxy in `base_url`,
+/// captive wifi — never returns at all. The panel would sit on "reading…" forever with no
+/// way to tell that from a slow model.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(6);
+
+/// Per-read, and it resets on every successful read (that is why it is `read_timeout` and
+/// not `timeout` — a total deadline would guillotine a long, healthy critique). The API
+/// sends SSE pings while the model thinks, so a gap this long means the connection is dead,
+/// not that the model is being thoughtful.
+const READ_TIMEOUT: Duration = Duration::from_secs(45);
+
+/// The host we are talking to, for error messages: `https://api.anthropic.com` →
+/// `api.anthropic.com`. Naming it matters because `base_url` is configurable — when
+/// somebody has pointed redpen at a local proxy, "can't reach localhost:8787" is the whole
+/// diagnosis, and "can't reach api.anthropic.com" would be an actively misleading one.
+fn host_of(base_url: &str) -> &str {
+    let after_scheme = base_url.split("://").nth(1).unwrap_or(base_url);
+    after_scheme.split('/').next().unwrap_or(after_scheme)
+}
+
+/// `#status` is one short line in a 480pt card, not a log pane.
+///
+/// A reqwest failure stringifies to the whole chain — "error sending request for url
+/// (https://api.anthropic.com/v1/messages): client error (Connect): dns error: failed to
+/// lookup address information: nodename nor servname provided" — which is accurate, wraps
+/// over four lines, and tells you nothing you can act on. The chain goes to the log; the
+/// card gets the one sentence that says what to do about it.
+fn network_message(host: &str, e: &reqwest::Error) -> String {
+    if e.is_connect() {
+        format!("can’t reach {host} — check your connection")
+    } else if e.is_timeout() {
+        format!("{host} is not responding")
+    } else {
+        format!("network error talking to {host}")
+    }
+}
+
 pub async fn run(app: AppHandle, loaded: Loaded, text: String) {
     let fail = |msg: String| {
         eprintln!("[redpen] {msg}");
@@ -360,9 +401,19 @@ pub async fn run(app: AppHandle, loaded: Loaded, text: String) {
     }
 
     let url = format!("{}/v1/messages", loaded.config.base_url.trim_end_matches('/'));
+    let host = host_of(&loaded.config.base_url);
     let body = build_body(&loaded.config.model, &loaded.config.effort, &loaded.system_prompt, &text);
 
-    let mut req = reqwest::Client::new()
+    let client = match reqwest::Client::builder()
+        .connect_timeout(CONNECT_TIMEOUT)
+        .read_timeout(READ_TIMEOUT)
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => return fail(format!("could not build the HTTP client: {e}")),
+    };
+
+    let mut req = client
         .post(&url)
         .header("x-api-key", &loaded.config.api_key)
         .header("anthropic-version", "2023-06-01")
@@ -376,7 +427,11 @@ pub async fn run(app: AppHandle, loaded: Loaded, text: String) {
 
     let resp = match req.json(&body).send().await {
         Ok(r) => r,
-        Err(e) => return fail(format!("request failed: {e}")),
+        Err(e) => {
+            // Full chain to the log, one actionable line to the card.
+            eprintln!("[redpen] request to {url} failed after {} ms: {e:?}", started.elapsed().as_millis());
+            return fail(network_message(host, &e));
+        }
     };
 
     if !resp.status().is_success() {
@@ -399,7 +454,16 @@ pub async fn run(app: AppHandle, loaded: Loaded, text: String) {
     while let Some(item) = stream.next().await {
         let bytes = match item {
             Ok(b) => b,
-            Err(e) => return fail(format!("stream broke: {e}")),
+            Err(e) => {
+                eprintln!("[redpen] stream from {url} broke: {e:?}");
+                // Whatever is already on screen stays there — a critique cut short is worth
+                // more than a cleared card.
+                return fail(if e.is_timeout() {
+                    format!("{host} stopped responding mid-critique")
+                } else {
+                    format!("connection to {host} dropped mid-critique")
+                });
+            }
         };
         for frame in buf.push_bytes(&bytes) {
             match parse_frame(&frame) {
@@ -508,5 +572,29 @@ mod splitter_tests {
         let (prose, tags) = feed(&["text\n", "```json\n{\"tags\":[\"art"]);
         assert_eq!(prose, "text\n");
         assert_eq!(tags, None);
+    }
+}
+
+#[cfg(test)]
+mod host_tests {
+    use super::host_of;
+
+    #[test]
+    fn the_default_endpoint_reduces_to_its_host() {
+        assert_eq!(host_of("https://api.anthropic.com"), "api.anthropic.com");
+        assert_eq!(host_of("https://api.anthropic.com/"), "api.anthropic.com");
+    }
+
+    #[test]
+    fn a_local_proxy_keeps_its_port() {
+        // decision #7: base_url is configurable, and naming the wrong host in the error
+        // would send you debugging your internet when your own proxy is down.
+        assert_eq!(host_of("http://localhost:8787"), "localhost:8787");
+        assert_eq!(host_of("http://127.0.0.1:8787/v1"), "127.0.0.1:8787");
+    }
+
+    #[test]
+    fn a_url_with_no_scheme_still_yields_something_printable() {
+        assert_eq!(host_of("api.anthropic.com"), "api.anthropic.com");
     }
 }
