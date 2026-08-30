@@ -9,14 +9,14 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshot.png" width="536" alt="redpen's card: two notes, one missing article and one preposition calque, each with the fix hanging off an elbow">
+  <img src="docs/screenshot.png" width="536" alt="Redpen's card: two notes, one missing article and one preposition calque, each with the fix hanging off an elbow">
 </p>
 
 Select text anywhere, press <kbd>⌥⌘E</kbd>, and a small card tells you what sounds off and
-why. It never inserts, replaces, or pastes anything — you retype the fix yourself.
+why. It never inserts, replaces, or pastes anything.
 
 AI apps that rewrite for you don't teach you anything — you copy, paste, and make the same
-mistake the next day. redpen makes you retype the line, and tells you why it was wrong.
+mistake the next day. Redpen makes you retype the line, and tells you why it was wrong.
 
 What it flags is **foreignness**. "I have a possibility to join tomorrow" breaks no grammar
 rule and is instantly non-native; that gap is the product. A spellchecker already caught
@@ -34,7 +34,7 @@ Builds are not notarized yet, so macOS blocks the first launch. Right-click the 
 xattr -dr com.apple.quarantine /Applications/redpen.app
 ```
 
-redpen lives in the menu bar. There is no Dock icon and no window — look for the mark in
+Redpen lives in the menu bar. There is no Dock icon and no window — look for the mark in
 the status bar.
 
 ### Two things it needs before it works
@@ -43,7 +43,7 @@ the status bar.
 `~/Library/Application Support/redpen/config.json` (mode 600) and tells you where it is.
 Put your key in the `api_key` field.
 
-**Accessibility permission.** redpen copies your selection by pressing ⌘C for you, and
+**Accessibility permission.** Redpen copies your selection by pressing ⌘C for you, and
 macOS only allows that with Accessibility permission. The app asks on first launch and
 gives you a button that opens the right settings pane.
 
