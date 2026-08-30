@@ -33,9 +33,15 @@ pub trait Clipboard {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum CaptureError {
-    /// The pasteboard never changed. Usually secure input (a password field), where macOS
-    /// swallows synthetic keystrokes — this is expected, not a bug. Sometimes it just means
-    /// nothing was selected.
+    /// The pasteboard never changed. Almost always means nothing was selected in whatever
+    /// has keyboard focus — which is not always the window the user is looking at, and not
+    /// always the pane inside it.
+    ///
+    /// Secure input (a password field, where macOS swallows synthetic keystrokes) produces
+    /// this too, but it is genuinely rare: across every trace taken while chasing the
+    /// first-press bug, `IsSecureEventInputEnabled()` was false every single time, and
+    /// naming it first in the message sent the investigation after the wrong cause for
+    /// hours. Lead with the likely reason.
     Timeout,
     /// Something was copied, but it is not text — an image, a file list.
     NotText,
@@ -49,7 +55,7 @@ pub enum CaptureError {
 impl fmt::Display for CaptureError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Timeout => write!(f, "nothing was copied (secure input, or no selection)"),
+            Self::Timeout => write!(f, "nothing was copied — is text still selected?"),
             Self::NotText => write!(f, "the selection is not text"),
             Self::EmptySelection => write!(f, "the selection is empty"),
             Self::Keystroke(e) => write!(f, "could not send ⌘C: {e} (check Accessibility permission)"),
@@ -310,6 +316,16 @@ mod tests {
         let r = fast(&m, || Ok(()));
         assert_eq!(r, Err(CaptureError::Timeout));
         assert_eq!(m.restored.get(), 0);
+    }
+
+    #[test]
+    fn the_timeout_message_leads_with_the_likely_cause() {
+        // Naming secure input first cost most of a debugging session: it was false in every
+        // trace, while the real cause — nothing selected in whatever holds focus — read as
+        // an afterthought.
+        let msg = CaptureError::Timeout.to_string();
+        assert!(msg.contains("selected"), "must point at the selection: {msg}");
+        assert!(!msg.contains("secure input"), "must not lead with the rare cause: {msg}");
     }
 
     #[test]

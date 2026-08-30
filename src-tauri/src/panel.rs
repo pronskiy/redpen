@@ -231,7 +231,7 @@ const KEYCODE_ESCAPE: u16 = 53;
 /// **Why this exists.** Capture synthesises ⌘C, which macOS delivers to whatever app is
 /// *active* — not to whatever window is on top. If redpen is the active app, the ⌘C lands
 /// on our own panel, which has no selection: nothing reaches the pasteboard and capture
-/// times out reporting "nothing was copied (secure input, or no selection)". Diagnosed from
+/// times out reporting "nothing was copied". Diagnosed from
 /// a trace where the one failing press read `frontmost="redpen"` and five successful ones
 /// read `frontmost="PhpStorm-EAP"`.
 ///
