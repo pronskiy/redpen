@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="38" height="36" viewBox="0 0 38 36">
+  <!-- redpen menu-bar glyph. A template image: pure black + alpha, recoloured by macOS for the
+       light/dark bar, so none of the app icon's colour survives here and the mark has to work in 1 bit.
+       The struck word becomes two thin bars — the gap between them IS the pen stroke, as negative
+       space. The solid indented bar below is the correction: split reads as marked, whole as fixed.
+       tray-icon scales this to 18pt tall (platform_impl/macos/mod.rs), so 36px is an exact 2x on
+       retina. Every edge sits on a whole pixel: compared side by side at true size, half-pixel tops and
+       heights render as grey mush, and a 4px bar closes the gap that carries the whole idea. -->
+  <g fill="#000">
+    <rect x="4"  y="7"  width="30" height="3" rx="1.5"/>
+    <rect x="4"  y="14" width="30" height="3" rx="1.5"/>
+    <rect x="13" y="22" width="21" height="6" rx="3"/>
+  </g>
+</svg>

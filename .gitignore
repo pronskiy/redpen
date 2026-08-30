@@ -3,6 +3,7 @@ docs/corpus/*.md
 !docs/corpus/README.md
 docs/corpus/results-*.md
 evals/.out/
+design/.out/
 
 # --- rust / tauri
 src-tauri/target/
