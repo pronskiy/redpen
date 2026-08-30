@@ -3,6 +3,7 @@ mod capture;
 mod config;
 mod llm;
 mod panel;
+mod update;
 
 use config::{Config, ConfigStore};
 use llm::InFlight;
@@ -57,7 +58,13 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_nspanel::init())
-        .invoke_handler(tauri::generate_handler![dismiss, open_accessibility_settings, ui_settings])
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .invoke_handler(tauri::generate_handler![
+            dismiss,
+            open_accessibility_settings,
+            ui_settings,
+            update::install_update
+        ])
         .setup(|app| {
             // Accessory policy: no Dock icon, no app menu, and the app never becomes the
             // active application. Epic B rests on this — a regular-policy app steals focus
@@ -72,12 +79,15 @@ pub fn run() {
             let cfg = store.current().config;
             app.manage(store.clone());
             app.manage(InFlight::default());
+            app.manage(update::Pending::default());
 
             // ---- tray ----------------------------------------------------------------
             let open_config = MenuItem::with_id(app, "open_config", "Open Config…", true, None::<&str>)?;
+            let check_updates =
+                MenuItem::with_id(app, "check_updates", "Check for Updates…", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit redpen", true, None::<&str>)?;
             let sep = PredefinedMenuItem::separator(app)?;
-            let menu = Menu::with_items(app, &[&open_config, &sep, &quit])?;
+            let menu = Menu::with_items(app, &[&open_config, &check_updates, &sep, &quit])?;
 
             // C1.5 — the menu bar needs a *template* image: pure black plus alpha, which macOS
             // recolours for the light and dark bar. The bundle icon cannot be reused here (it did
@@ -92,6 +102,7 @@ pub fn run() {
                 .show_menu_on_left_click(true)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "quit" => app.exit(0),
+                    "check_updates" => update::check_from_tray(app),
                     "open_config" => {
                         let path = Config::path();
                         if let Err(e) = Config::ensure_exists(&path) {

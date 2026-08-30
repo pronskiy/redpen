@@ -90,6 +90,35 @@ politely*, never hang.
 | After granting, capture works without a restart | ✅ | verified 2026-08-26 |
 | After a rebuild, permission state | ✅ | expected to reset; record what actually happens |
 
+## 5. Updates — tray "Check for Updates…"
+
+`tauri-plugin-updater` cannot be tested in CI either: it needs a real signed bundle, a real
+release endpoint, and a real macOS Accessibility grant to lose. The check path can be
+exercised now; the install path cannot be trusted until there is a Developer ID.
+
+The endpoint is `update_endpoint` in `config.json` and hot-reloads, so each row below is
+just an edit and a click on the tray item — no rebuild.
+
+| Check | Result | Notes |
+|-------|--------|-------|
+| `update_endpoint` empty → panel says checks are off | 🔲 | must not look like a network error |
+| Garbage URL (`"not a url"`) → panel names it | 🔲 | parse failure, not a hang |
+| Unreachable host → panel shows the failure | 🔲 | should not sit on "Checking…" forever |
+| Valid endpoint, same version → "You're up to date" | 🔲 | names the running version |
+| Valid endpoint, newer version → "Update available" | 🔲 | version, notes, Install button |
+| Unsigned build → Accessibility warning shown | 🔲 | expected in dev; this is the whole point of the warning |
+| Panel dismisses with Esc mid-check | 🔲 | no crash, no orphaned request |
+
+**The install path is the one that can quietly break capture.** After the first real
+update, re-run §1 (capture matrix) and §4 (permission behaviour) before trusting it:
+
+| Check | Result | Notes |
+|-------|--------|-------|
+| Developer ID signed build → no warning shown | 🔲 | needs a $99/yr identity; blocked until then |
+| Install and restart replaces the bundle | 🔲 | |
+| Accessibility grant survives the update | 🔲 | **the acceptance test.** Fails on any unsigned build, by design |
+| ⌥⌘E still captures after the update | 🔲 | if this fails, the grant was revoked |
+
 ## Outcome
 
 Fill this in before advancing to Phase A2, and copy the verdict into the

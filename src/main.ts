@@ -228,6 +228,58 @@ listen<string>("critique-error", (e) => setStatus(e.payload, "error"));
 // never rendered (decision #6). Epic E is what finally stores these.
 listen<string[]>("critique-tags", (e) => console.debug("[redpen] tags", e.payload));
 
+// ---- updates (tray → "Check for Updates…") --------------------------------------------
+// Rust owns the flow and emits; this only draws. Same split as critique, so the panel has
+// exactly one place that knows what a card looks like.
+
+type Update = { version: string; current: string; notes: string | null; unsigned: boolean };
+
+/** The panel is the only surface this app has, so an update reuses the card wholesale. */
+function updateCard(title: string, body: string, extra = "") {
+  out.innerHTML = `
+    <p class="verdict">${esc(title)}</p>
+    <div class="note stacked">
+      <p class="tell">${body}</p>
+      ${extra}
+    </div>`;
+}
+
+listen("update-checking", () => {
+  setStatus("");
+  updateCard("Checking for updates", "Asking the release endpoint what the latest build is.");
+});
+
+listen<string>("update-none", (e) =>
+  updateCard("You're up to date", `redpen ${esc(e.payload)} is the latest build.`));
+
+listen<string>("update-error", (e) =>
+  updateCard("Couldn't check for updates", esc(e.payload)));
+
+listen<Update>("update-available", (e) => {
+  const u = e.payload;
+  const notes = u.notes ? `<p class="tell">${esc(u.notes)}</p>` : "";
+  // The warning is the whole reason this flow is not just a silent auto-update: on a build
+  // macOS cannot tie to a stable signing identity, replacing the binary drops the
+  // Accessibility grant and ⌥⌘E goes quiet with no visible cause.
+  const warning = u.unsigned
+    ? `<p class="tell"><strong>This build isn't Developer ID signed.</strong> Installing will
+         replace the binary, and macOS will revoke redpen's Accessibility permission — you'll
+         have to grant it again before capture works.</p>`
+    : "";
+  updateCard(
+    "Update available",
+    `redpen ${esc(u.version)} is out. You have ${esc(u.current)}.`,
+    `${notes}${warning}<button id="do-update">Install and restart</button>`
+  );
+  out.querySelector("#do-update")?.addEventListener("click", () => {
+    updateCard("Downloading…", "redpen will restart when the update is in place.");
+    invoke("install_update").catch((err) => updateCard("Update failed", esc(String(err))));
+  });
+});
+
+listen<number>("update-progress", (e) =>
+  updateCard("Downloading…", `${e.payload}% — redpen will restart when the update is in place.`));
+
 // C1.4: Accessibility is what lets capture synthesise ⌘C. Without it every press fails, so
 // say so once, up front, rather than once per press.
 listen("needs-accessibility", () => {

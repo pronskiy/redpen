@@ -15,6 +15,12 @@ fn default_base_url() -> String { "https://api.anthropic.com".into() }
 fn default_model() -> String { "claude-sonnet-5".into() }   // decision #25
 fn default_effort() -> String { "medium".into() }
 fn default_hotkey() -> String { "Alt+Cmd+E".into() }   // same string evals/run.sh writes
+/// Runtime, not baked in: the matching `pubkey` has to live in `tauri.conf.json` because it
+/// is paired with the signing key at build time, but the endpoint is only a URL, and keeping
+/// it here means it hot-reloads with everything else. Empty switches update checks off.
+fn default_update_endpoint() -> String {
+    "https://github.com/pronskiy/redpen/releases/latest/download/latest.json".into()
+}
 // Integer points, not f64: `Config` derives `Eq` so that hot reload can compare two loads
 // for equality, and f64 is not `Eq`. Half-point control is not worth losing that.
 fn default_font_size() -> u8 { 15 }
@@ -36,6 +42,8 @@ pub struct Config {
     pub font_size: u8,
     #[serde(default)]
     pub system_prompt_path: String,
+    #[serde(default = "default_update_endpoint")]
+    pub update_endpoint: String,
 }
 
 impl Default for Config {
@@ -48,6 +56,7 @@ impl Default for Config {
             hotkey: default_hotkey(),
             font_size: default_font_size(),
             system_prompt_path: String::new(),
+            update_endpoint: default_update_endpoint(),
         }
     }
 }
@@ -236,6 +245,21 @@ mod tests {
         assert_eq!(c.model, "claude-sonnet-5", "missing keys must not blank out defaults");
         assert_eq!(c.hotkey, "Alt+Cmd+E");
         assert_eq!(c.font_size, 15, "an older config without font_size still works");
+    }
+
+    #[test]
+    fn update_endpoint_defaults_and_can_be_turned_off() {
+        let d = tmp("update");
+        let p = d.join("config.json");
+        std::fs::write(&p, r#"{"api_key":"sk-test"}"#).unwrap();
+        assert!(
+            Config::load_from(&p).update_endpoint.contains("releases"),
+            "a config written before updates existed still gets an endpoint"
+        );
+
+        // An explicit empty string is how you switch update checks off.
+        std::fs::write(&p, r#"{"update_endpoint":""}"#).unwrap();
+        assert_eq!(Config::load_from(&p).update_endpoint, "");
     }
 
     #[test]
