@@ -15,10 +15,8 @@
 Select text anywhere, press <kbd>⌥⌘E</kbd>, and a small card tells you what sounds off and
 why. It never inserts, replaces, or pastes anything — you retype the fix yourself.
 
-That is the whole point. A tool that rewrites your text for you teaches you nothing: you
-copy the clean version, ship it, and make the same mistake next week. redpen shows you the
-*mechanism* — "Russian *зависеть от* carries the *from* across; English `depend` takes
-`on`" — because a rule you understand is one you carry into the next message.
+AI apps that rewrite for you don't teach you anything — you copy, paste, and make the same
+mistake the next day. redpen makes you retype the line, and tells you why it was wrong.
 
 What it flags is **foreignness**. "I have a possibility to join tomorrow" breaks no grammar
 rule and is instantly non-native; that gap is the product. A spellchecker already caught
