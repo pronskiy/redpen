@@ -4,39 +4,44 @@
 // STRICT JSON: no comments, no trailing commas. Both jq (the eval harness) and serde_json
 // (the app) reject comments outright, so the commented copy lives here instead.
 //
-// `evals/run.sh` writes the live file on first run with these defaults. Both the harness and
-// the app read it, so there is exactly one place a key or a model can be set.
+// The app and `evals/run.sh` each write the live file on first run with these defaults, and
+// both read it afterwards, so there is exactly one place a key or a model can be set.
+//
+// Everything here hot-reloads: edit, save, and the running app picks it up. No restart.
 {
   // Anthropic API key. chmod 600 — this is the one secret in the file.
   // ANTHROPIC_API_KEY in the environment overrides it for a one-off run.
   "api_key": "",
 
-  // Swap for a proxy or an Anthropic-compatible endpoint (decision #7).
+  // Swap for a proxy or an Anthropic-compatible endpoint.
   "base_url": "https://api.anthropic.com",
 
-  // Decision #25 (supersedes #15). Sonnet 5 — $2/$10 per MTok against Opus 5's $5/$25.
-  // This tier does NOT accept the `fallbacks` parameter; the harness gates on it
-  // automatically (decision #24). The A3 gate certifies THIS model plus the prompt, so
-  // changing it means re-running the corpus.
+  // Sonnet 5 — $2/$10 per MTok against Opus 5's $5/$25. This tier does not accept the
+  // `fallbacks` parameter, and the harness gates on that automatically. The prompt was
+  // rated against this model, so changing it means re-running the corpus.
   "model": "claude-sonnet-5",
 
-  // Decision #16: this is the latency lever, NOT the model tier. Thinking is on by default
-  // on Opus 5 and its output is hidden, so the panel shows nothing until it finishes —
-  // lower effort, don't disable thinking. Corpus evaluation must run at whatever ships here,
-  // or the ratings don't transfer.  low | medium | high | xhigh | max
+  // How hard the model thinks:  low | medium | high | xhigh | max
+  // It buys depth with latency; which model runs is still whatever `model` says above.
+  // Thinking is on by default and its output is hidden, so the panel sits empty until the
+  // model finishes. If that wait is too long, lower the effort and leave thinking on.
+  // Rate the corpus at whatever ships here, or the ratings don't transfer.
   "effort": "medium",
 
-  // Global hotkey (step A1.2). Unverified against Roman's existing bindings — SPEC §7.
+  // Global hotkey.
   "hotkey": "Alt+Cmd+E",
 
-  // Base text size of the card, in points. Everything else scales off it, and it hot-reloads
-  // like the rest of this file — edit, save, press the hotkey, no restart. Integer points:
-  // the config type derives Eq so reload can compare loads, and f64 is not Eq.
+  // Base text size of the card, in points. Everything else scales off it. Whole points
+  // only: the config type derives Eq so a reload can compare two loads for equality, and
+  // f64 is not Eq.
   "font_size": 15,
 
-  // Path to the system prompt, kept as a real Markdown file you edit in a real editor —
-  // which is the entire point of decision #8. A 141-line prompt inlined as an escaped JSON
-  // string would be unreadable and uneditable, so it is a path, not a value.
-  // Points into the repo, so there is no second copy to drift.
-  "system_prompt_path": "/Users/pronskiy/projects/redpen/prompts/critique.md"
+  // Path to the system prompt, kept as a real Markdown file you edit in a real editor.
+  // A 141-line prompt inlined as an escaped JSON string would be unreadable and
+  // uneditable, so this field holds a path. Point it at your own checkout — then the repo
+  // copy is the only copy, and there is nothing to drift.
+  "system_prompt_path": "/Users/you/projects/redpen/prompts/critique.md",
+
+  // Where "Check for Updates…" looks. Empty switches update checks off.
+  "update_endpoint": "https://github.com/pronskiy/redpen/releases/latest/download/latest.json"
 }
