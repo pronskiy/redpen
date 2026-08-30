@@ -30,7 +30,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVFRUM5MDNERjYxOUQ5MTUKUldRVjJSbjJQWkRzWGdwN2Q3cDR1U2Q4cEhKL3k4ek40K1ZOdjRGTzNrWGV0K2VGVkVTelFGNVEK",
       "endpoints": [
         "https://github.com/pronskiy/redpen/releases/latest/download/latest.json"
       ]
