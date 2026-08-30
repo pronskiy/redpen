@@ -82,6 +82,23 @@ function wordDiff(a: string[], b: string[]) {
     else { j++; changed++; }
   }
   changed += (n - i) + (m - j);
+
+  // The rewrite fixes a *fragment*, and the prompt asks for the shortest one that works, so
+  // it routinely stops before the end of the quoted span: "Great to see what's cooking in
+  // Qodana" comes back as "It's great to see". LCS has nothing to align the four trailing
+  // words with and calls them deleted, so the card strikes text the critique never objected
+  // to — the loudest possible way to be wrong.
+  //
+  // A rewrite that simply ran out is recognisable: the word at its own end is one that
+  // matched, so it never reached past there and the quote words beyond it are context. When
+  // the rewrite does carry words of its own out there it genuinely replaced them ("previos
+  // submissions" -> "previous submissions"), and the strike stays.
+  const first = kept.indexOf(true), last = kept.lastIndexOf(true);
+  if (first !== -1) {
+    if (!added[0]) for (let k = 0; k < first; k++) { kept[k] = true; changed--; }
+    if (!added[m - 1]) for (let k = last + 1; k < n; k++) { kept[k] = true; changed--; }
+  }
+
   return { kept, added, changed };
 }
 
