@@ -17,6 +17,9 @@ dist-ssr
 *.log
 npm-debug.log*
 
+# --- playwright scratch (screenshot tooling)
+.playwright-mcp/
+
 # --- editors / os
 .DS_Store
 .idea
