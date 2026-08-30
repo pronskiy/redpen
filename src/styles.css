@@ -93,6 +93,22 @@ body {
   font-size: 0.95rem;
 }
 
+/* Scoped to .notes throughout: the Accessibility onboarding screen builds a bare
+   `<div class="note stacked">` outside any list, and must keep the full width. */
+.notes {
+  margin: 0;
+  padding-left: 1.5em;   /* the gutter the numbers hang in */
+}
+
+/* Native <ol> markers rather than a counter on an absolutely-positioned ::before — the
+   browser aligns a marker to the first line box's baseline for free, which a smaller
+   pseudo-element does not do without hand-tuned offsets. */
+.notes > .note::marker {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
 .note { margin: 0 0 14px; }
 .note:last-child { margin-bottom: 4px; }
 .note p { margin: 0; }

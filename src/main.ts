@@ -119,10 +119,10 @@ function renderNote(note: Note): string {
 
   if (!native) {
     return `
-      <div class="note stacked">
+      <li class="note stacked">
         <p class="quote">${esc(note.quote)}</p>
         <p class="tell">${esc(note.tell)}</p>
-      </div>`;
+      </li>`;
   }
 
   const aw = note.quote.split(/\s+/).filter(Boolean);
@@ -135,38 +135,40 @@ function renderNote(note: Note): string {
   if (d.changed > 0 && d.changed <= INLINE_MAX_WORDS) {
     const fix = bw.filter((_, i) => d.added[i]).join(" ");
     return `
-      <div class="note inline">
+      <li class="note inline">
         <p class="quote">${removedHtml}</p>
         <p class="fix"><span class="elbow">└</span> <ins>${esc(fix || "—")}</ins>
            <span class="tell">${esc(note.tell)}</span>${altHtml}</p>
-      </div>`;
+      </li>`;
   }
 
   const keptShare = aw.length ? d.kept.filter(Boolean).length / aw.length : 1;
   if (keptShare < MIN_KEPT_SHARE) {
     // Too little in common to call it an edit — no strikethrough, no green.
     return `
-      <div class="note stacked">
+      <li class="note stacked">
         <p class="quote">${esc(note.quote)}</p>
         <p class="tell">${esc(note.tell)}</p>
         <p class="native"><span class="elbow">→</span> ${esc(native)}${altHtml}</p>
-      </div>`;
+      </li>`;
   }
 
   // A restructure needs the whole rewrite — but still only the new words in green.
   return `
-    <div class="note stacked">
+    <li class="note stacked">
       <p class="quote">${removedHtml}</p>
       <p class="tell">${esc(note.tell)}</p>
       <p class="native"><span class="elbow">→</span> ${addedHtml}${altHtml}</p>
-    </div>`;
+    </li>`;
 }
 
 function render() {
   const { verdict, notes } = parse(buffer);
+  // An <ol> even for a single note: render() re-runs on every stream delta, so a list that
+  // only appeared once the second note landed would shove the first one sideways mid-stream.
+  const list = notes.length ? `<ol class="notes">${notes.map(renderNote).join("")}</ol>` : "";
   out.innerHTML =
-    (verdict ? `<p class="verdict">${esc(verdict)}</p>` : "") +
-    notes.map(renderNote).join("");
+    (verdict ? `<p class="verdict">${esc(verdict)}</p>` : "") + list;
   out.scrollTop = out.scrollHeight;
 }
 
