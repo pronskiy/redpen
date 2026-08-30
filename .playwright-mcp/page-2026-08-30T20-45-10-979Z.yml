@@ -1,0 +1,18 @@
+- generic [ref=e3]:
+  - paragraph [ref=e4]: slightly off — a missing article and one preposition carried from Russian
+  - list [ref=e5]:
+    - listitem [ref=e6]:
+      - paragraph [ref=e7]: Alexey is unsung hero of this release
+      - paragraph [ref=e8]:
+        - text: └
+        - insertion [ref=e9]: an
+        - text: · Russian has no articles, so the slot before a singular count noun gets skipped.
+    - listitem [ref=e10]:
+      - paragraph [ref=e11]:
+        - text: It depends
+        - deletion [ref=e12]: from
+        - text: the release date
+      - paragraph [ref=e13]:
+        - text: └
+        - insertion [ref=e14]: "on"
+        - text: · зависеть от carries the "from" across; English depend takes "on".

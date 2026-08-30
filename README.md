@@ -1,75 +1,149 @@
-# redpen
+<h1 align="center">
+  <img src="src-tauri/icons/128x128.png" width="88" alt="">
+  <br>
+  redpen
+</h1>
 
-A macOS menu-bar app that critiques your English instead of correcting it. Select text
-anywhere, hit the hotkey, read what sounds off and why — then retype it yourself. It never
-inserts, replaces, or pastes anything; that is the whole point.
+<p align="center">
+  A macOS menu-bar app that <strong>critiques</strong> your English instead of correcting it.
+</p>
 
-Full plan, phases and decisions: [SPEC.md](SPEC.md).
+<p align="center">
+  <img src="docs/screenshot.png" width="536" alt="redpen's card: two notes, one missing article and one preposition calque, each with the fix hanging off an elbow">
+</p>
 
-## Status
+Select text anywhere, press <kbd>⌥⌘E</kbd>, and a small card tells you what sounds off and
+why. It never inserts, replaces, or pastes anything — you retype the fix yourself.
 
-Pre-MVP. The build order is **A3 → A1 → A2** (decision #14): the prompt has to prove itself
-against real writing before any of the app is worth building.
+That is the whole point. A tool that rewrites your text for you teaches you nothing: you
+copy the clean version, ship it, and make the same mistake next week. redpen shows you the
+*mechanism* — "Russian *зависеть от* carries the *from* across; English `depend` takes
+`on`" — because a rule you understand is one you carry into the next message.
+
+It looks for **foreignness**, not errors. "I have a possibility to join tomorrow" breaks no
+grammar rule and is instantly non-native; that gap is the product. A spellchecker already
+caught everything else.
+
+## Install
+
+Download the latest `.dmg` from [**Releases**](https://github.com/pronskiy/redpen/releases/latest)
+and drag redpen to Applications.
+
+Builds are not notarized yet, so macOS blocks the first launch. Right-click the app →
+**Open** → **Open**, or clear the quarantine flag yourself:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/redpen.app
+```
+
+redpen lives in the menu bar. There is no Dock icon and no window — look for the mark in
+the status bar.
+
+### Two things it needs before it works
+
+**An Anthropic API key.** On first launch redpen writes
+`~/Library/Application Support/redpen/config.json` (mode 600) and tells you where it is.
+Put your key in the `api_key` field.
+
+**Accessibility permission.** redpen copies your selection by pressing ⌘C for you, and
+macOS only allows that with Accessibility permission. The app asks on first launch and
+gives you a button that opens the right settings pane.
+
+## Using it
 
 | | |
 |---|---|
-| A3.1 prompt | ✅ `prompts/critique.md` |
-| A3.2 eval harness | ✅ `evals/run.sh` |
-| A3.3 corpus | 🔲 **needs 20 real texts** — see `docs/corpus/README.md` |
-| A3.4 iterate + rate | 🔲 blocked on the corpus |
-| A1.1 scaffold | ✅ this repo boots |
-| A1.2 hotkey + tray | ✅ ⌥⌘E fires; tray has Quit / Open Config |
-| A1.3 capture | ✅ 7 unit tests + verified in 5 apps |
-| A1.4 test matrix | ✅ `docs/manual-tests.md`, all green |
-| A2.1 config + hot reload | ✅ watches config.json and the prompt file |
-| A2.2 streaming llm | ✅ SSE → Tauri events |
-| A2.3 render + abort | ✅ **Epic A complete** — hotkey to critique, Esc aborts |
-| B1 panel | ✅ **Epic B complete** — never steals focus |
-| C1.2–C1.4 | ✅ tags hidden, 3 ms to visible, permission onboarding |
-| C1.1 card design | ✅ inline annotation + adaptive vibrancy |
+| <kbd>⌥⌘E</kbd> | critique whatever is selected |
+| <kbd>Esc</kbd> | dismiss the card and abort the request |
 
-## Layout
+The card never takes keyboard focus, so your cursor stays exactly where it was — you can
+read the note and keep typing in the app you were already in.
 
-```
-prompts/critique.md    system prompt — the actual product
-evals/run.sh           prompt × corpus → rating sheet (bash + curl, no Rust)
-docs/corpus/           20 real texts + results. Gitignored: real writing stays local
-src-tauri/             the Rust app
-src/, index.html       the webview
-```
+Your clipboard is put back the way it was afterwards. If a clipboard manager is running,
+redpen backs off rather than fighting it.
 
-## Running the prompt gate
+## Configuring
 
-No Rust toolchain needed. The first run writes
-`~/Library/Application Support/redpen/config.json` (mode 600) and tells you where it is; put
-your key in its `api_key` field, or export `ANTHROPIC_API_KEY` for a one-off. The harness and
-the app read that same file, so a key or a model is set in exactly one place.
+Everything lives in `~/Library/Application Support/redpen/config.json`, and edits apply
+**live** — save the file and the running app picks them up. No restart.
 
-`config.example.jsonc` documents every field. It is **documentation only** — the live config
-must be strict JSON, because both `jq` and `serde_json` reject comments.
+| Field | What it does |
+|---|---|
+| `api_key` | Your Anthropic API key |
+| `model` | Which model critiques the text |
+| `effort` | How hard it thinks — `low`, `medium`, `high`, `xhigh`, `max`. A latency lever, not a quality tier |
+| `hotkey` | Defaults to `Alt+Cmd+E`; rebinds live |
+| `font_size` | Base size for the card, in points — everything scales off it |
+| `system_prompt_path` | Point this at your own prompt file to change what gets flagged |
+| `update_endpoint` | Where update checks look. Empty turns checks off |
+| `base_url` | For an API-compatible proxy |
 
-```sh
-evals/run.sh -n      # what it sees, spends nothing
-evals/run.sh         # run the prompt across the corpus
-evals/run.sh -e medium -p prompts/v2.md    # sweep effort, try a variant
-```
+`config.example.jsonc` documents every field with comments. It is **documentation only** —
+the live config has to be strict JSON.
 
-## Running the app
+## Updates
+
+Menu bar icon → **Check for Updates…**
+
+If your copy is not signed with a Developer ID, the card says so before offering to
+install, because replacing the binary makes macOS revoke the Accessibility permission and
+capture stops working until you grant it again.
+
+---
+
+# Development
 
 ```sh
 npm install
 npm run tauri dev
 ```
 
-The window is created **hidden** (`visible: false` in `tauri.conf.json`) so it can be
-converted to an NSPanel before its first show — converting after the first show costs a frame
-of focus theft (step B1.1). The app runs under the macOS *accessory* activation policy: no
-Dock icon, no app menu, and it never becomes the active application. Look for the tray icon in
-the menu bar; there is no window to see yet.
+macOS only. The app is a Tauri shell: Rust for capture, the API call, and the panel;
+a small TypeScript webview for the card.
 
-### Dev annoyance to expect
+## Layout
 
-macOS ties Accessibility permission to the signed binary, so **every rebuild can reset it**
-and the simulated ⌘C in `capture.rs` will silently stop working. When capture mysteriously
-returns nothing, re-grant under System Settings → Privacy & Security → Accessibility before
-debugging anything else. A stable signing identity reduces how often this bites.
+```
+prompts/critique.md    the system prompt — the actual product
+evals/run.sh           prompt × corpus → rating sheet (bash + curl, no Rust)
+docs/corpus/           real texts to test the prompt against; gitignored, stays local
+src-tauri/             the Rust app
+src/, index.html       the webview
+```
+
+## Working on the prompt
+
+Prompt quality *is* the product, so it has its own harness that needs no Rust toolchain and
+no app — just the same `config.json` the app reads, so a key or a model is set in one place.
+
+```sh
+evals/run.sh -n                            # show what it sees, spend nothing
+evals/run.sh                               # run the prompt across the corpus
+evals/run.sh -e medium -p prompts/v2.md    # sweep effort, try a variant
+```
+
+## Tests
+
+```sh
+cargo test --manifest-path src-tauri/Cargo.toml    # Rust unit tests
+npx tsc --noEmit                                   # typecheck the webview
+```
+
+`docs/manual-tests.md` covers what CI cannot reach: real pasteboards, real Accessibility
+permission, and real apps to steal a selection from.
+
+## The permission annoyance
+
+macOS ties Accessibility permission to the exact binary, so **every rebuild can reset it**
+and the simulated ⌘C stops working silently. When capture mysteriously returns nothing,
+re-grant under System Settings → Privacy & Security → Accessibility before debugging
+anything else.
+
+## Releasing
+
+CI runs the tests on every push and pull request. Pushing a `v*` tag builds a signed,
+universal binary and opens a draft release; the update endpoint stays dark until you
+publish it.
+
+Bump the version in `tauri.conf.json`, `package.json` and `Cargo.toml` together — the
+release workflow refuses a tag that disagrees with any of them.
