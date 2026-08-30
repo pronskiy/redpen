@@ -3,7 +3,7 @@
 //! AX-based capture was rejected (decision #4): it is patchy in exactly the apps that
 //! matter — Slack, browsers, anything Electron. Simulated ⌘C works wherever ⌘C works.
 //!
-//! The three battle-scars this module exists to preserve, all of them in `capture_with`
+//! The four battle-scars this module exists to preserve, all of them in `capture_with`
 //! and all of them unit-tested against a mock:
 //!
 //! 1. A settle delay before polling. Firing the keystroke and reading immediately races
@@ -12,6 +12,8 @@
 //!    comparison sees no change and hangs until timeout.
 //! 3. Restore only if `changeCount == before + 1`. Anything else means a clipboard manager
 //!    (Raycast, Maccy) wrote after us, and restoring would stomp what the user just did.
+//! 4. Send ⌘C more than once, re-checking focus before each. A single attempt has no
+//!    answer to a keystroke that is dropped or lands in the wrong app — see `capture_with`.
 //!
 //! Nothing here ever writes to the user's text. Decision #1.
 
@@ -59,35 +61,61 @@ impl std::error::Error for CaptureError {}
 
 /// The whole algorithm, with every dependency injected so it can be tested without a
 /// real pasteboard, a real keyboard, or a two-second wall-clock wait.
+///
+/// `windows` is how long to wait for the pasteboard after each ⌘C — one entry per attempt,
+/// so its length *is* the attempt count.
+///
+/// **Why it retries at all** (battle-scar 4). The known cause of a lost ⌘C is fixed at the
+/// call site — `before_each` re-checks that redpen is not the active app — but the retry
+/// stays as the general answer to a keystroke that simply did not take. Reporting a failure
+/// the user disproves a second later by pressing the hotkey again is the worst outcome
+/// available, and one extra keystroke is cheap.
+///
+/// Note a retry only helps if something *changes* between attempts, which is exactly what
+/// `before_each` is for. Two identical attempts into a wrongly-focused app both fail, as the
+/// traces showed before the focus check moved in here.
+///
+/// The first window is deliberately short. A ⌘C that is going to work lands in well under
+/// 100 ms, so a long first window buys nothing but delay before the retry.
 pub fn capture_with<C: Clipboard>(
     clip: &C,
-    send_copy: impl FnOnce() -> Result<(), CaptureError>,
+    mut send_copy: impl FnMut() -> Result<(), CaptureError>,
     settle: Duration,
     poll_every: Duration,
-    timeout: Duration,
+    windows: &[Duration],
 ) -> Result<String, CaptureError> {
     let snapshot = clip.snapshot();
-    let before = clip.change_count();
+    // Re-baselined per attempt, so the restore check below always refers to the last ⌘C we
+    // sent. Comparing against the very first reading would count two attempts as two
+    // foreign writes and skip the restore.
+    let mut before = clip.change_count();
 
-    send_copy()?;
-    std::thread::sleep(settle);
-
-    let deadline = Instant::now() + timeout;
     let mut changed = false;
     let mut text = None;
-    loop {
-        if clip.change_count() != before {
-            changed = true;
-            text = clip.read_text();
-            break;
+
+    'attempts: for (attempt, window) in windows.iter().enumerate() {
+        before = clip.change_count();
+        send_copy()?;
+        if attempt > 0 {
+            println!("[redpen] ⌘C produced nothing; retrying (attempt {})", attempt + 1);
         }
-        if Instant::now() >= deadline {
-            break;
+        std::thread::sleep(settle);
+
+        let deadline = Instant::now() + *window;
+        loop {
+            if clip.change_count() != before {
+                changed = true;
+                text = clip.read_text();
+                break 'attempts;
+            }
+            if Instant::now() >= deadline {
+                break;
+            }
+            std::thread::sleep(poll_every);
         }
-        std::thread::sleep(poll_every);
     }
 
-    // Exactly one write since the snapshot — ours. Anything else and somebody is holding
+    // Exactly one write since the last attempt — ours. Anything else and somebody is holding
     // the pasteboard; leave it alone rather than fight a clipboard manager.
     if clip.change_count() == before + 1 {
         clip.restore(&snapshot);
@@ -192,14 +220,24 @@ fn send_copy() -> Result<(), CaptureError> {
 }
 
 /// Capture the current selection. Blocks for up to ~2s in the worst case.
+///
+/// `before_each` runs immediately before every ⌘C, and exists for one reason: whatever it
+/// checks has to be checked *here*, microseconds before the keystroke, not earlier. The
+/// caller uses it to make sure redpen is not the active app — a check that was previously
+/// done once up front and was worthless, because showing the panel activates us afterwards.
 #[cfg(target_os = "macos")]
-pub fn selection() -> Result<String, CaptureError> {
+pub fn selection(before_each: impl Fn()) -> Result<String, CaptureError> {
     capture_with(
         &MacClipboard,
-        send_copy,
+        || {
+            before_each();
+            send_copy()
+        },
         Duration::from_millis(50),
         Duration::from_millis(5),
-        Duration::from_secs(2),
+        // A working ⌘C lands in well under 100 ms, so give up on the first one quickly and
+        // spend the rest of the budget on the retry. Total worst case ~2 s.
+        &[Duration::from_millis(400), Duration::from_millis(1400)],
     )
 }
 
@@ -223,8 +261,20 @@ mod tests {
         fn read_text(&self) -> Option<String> { self.text.borrow().clone() }
     }
 
-    fn fast<C: Clipboard>(clip: &C, copy: impl FnOnce() -> Result<(), CaptureError>) -> Result<String, CaptureError> {
-        capture_with(clip, copy, Duration::ZERO, Duration::from_millis(1), Duration::from_millis(40))
+    /// One attempt, so these cases assert the single-shot behaviour they always did.
+    fn fast<C: Clipboard>(clip: &C, copy: impl FnMut() -> Result<(), CaptureError>) -> Result<String, CaptureError> {
+        capture_with(clip, copy, Duration::ZERO, Duration::from_millis(1), &[Duration::from_millis(40)])
+    }
+
+    /// Two attempts, for the retry cases.
+    fn retrying<C: Clipboard>(clip: &C, copy: impl FnMut() -> Result<(), CaptureError>) -> Result<String, CaptureError> {
+        capture_with(
+            clip,
+            copy,
+            Duration::ZERO,
+            Duration::from_millis(1),
+            &[Duration::from_millis(20), Duration::from_millis(40)],
+        )
     }
 
     #[test]
@@ -285,6 +335,72 @@ mod tests {
         let m = Mock::default();
         let r = fast(&m, || Err(CaptureError::Keystroke("no accessibility permission".into())));
         assert!(matches!(r, Err(CaptureError::Keystroke(_))));
+        assert_eq!(m.restored.get(), 0);
+    }
+
+    #[test]
+    fn a_dropped_first_keystroke_is_retried() {
+        // The reported bug: the first ⌘C after launch vanishes, the second works.
+        let m = Mock::default();
+        let sends = Cell::new(0);
+        let r = retrying(&m, || {
+            sends.set(sends.get() + 1);
+            if sends.get() >= 2 {
+                m.count.set(m.count.get() + 1);
+                *m.text.borrow_mut() = Some("rescued by the retry".into());
+            }
+            Ok(())
+        });
+        assert_eq!(r.unwrap(), "rescued by the retry");
+        assert_eq!(sends.get(), 2, "must have sent ⌘C a second time");
+    }
+
+    #[test]
+    fn a_working_first_keystroke_is_never_sent_twice() {
+        // Every retry is a real keystroke into the user's app, so it must not fire when the
+        // first one already worked.
+        let m = Mock::default();
+        let sends = Cell::new(0);
+        let r = retrying(&m, || {
+            sends.set(sends.get() + 1);
+            m.count.set(m.count.get() + 1);
+            *m.text.borrow_mut() = Some("first time".into());
+            Ok(())
+        });
+        assert_eq!(r.unwrap(), "first time");
+        assert_eq!(sends.get(), 1, "no gratuitous second ⌘C");
+    }
+
+    #[test]
+    fn the_prior_clipboard_is_restored_even_when_the_retry_is_what_worked() {
+        // The restore guard compares against the *last* attempt. Baselining against the
+        // first reading would see +1 from a two-attempt capture as a foreign write and
+        // silently skip the restore, losing whatever the user had copied.
+        let m = Mock::default();
+        *m.snapshot_data.borrow_mut() = vec![("public.png".into(), vec![9])];
+        let sends = Cell::new(0);
+        let r = retrying(&m, || {
+            sends.set(sends.get() + 1);
+            if sends.get() >= 2 {
+                m.count.set(m.count.get() + 1);
+                *m.text.borrow_mut() = Some("rescued".into());
+            }
+            Ok(())
+        });
+        assert_eq!(r.unwrap(), "rescued");
+        assert_eq!(m.restored.get(), 1, "prior clipboard must still be put back");
+    }
+
+    #[test]
+    fn every_attempt_failing_still_reports_a_clean_timeout() {
+        let m = Mock::default();
+        let sends = Cell::new(0);
+        let r = retrying(&m, || {
+            sends.set(sends.get() + 1);
+            Ok(())
+        });
+        assert_eq!(r, Err(CaptureError::Timeout));
+        assert_eq!(sends.get(), 2, "both attempts used before giving up");
         assert_eq!(m.restored.get(), 0);
     }
 

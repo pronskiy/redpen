@@ -86,20 +86,44 @@ pub fn convert(window: &WebviewWindow<Wry>) -> tauri::Result<()> {
 ///
 /// So the dispatch lives here rather than at the call sites — the hazard belongs to the
 /// module that owns the dependency, not to everyone who uses it.
+/// Bumped once per completed show, so the capture thread can tell when the panel is
+/// actually on screen rather than merely queued.
+///
+/// This matters because the *first* show activates the app — measurably: 12 ms of work the
+/// first time, 0 ms every time after, and a `frontmost` that flips from the user's editor
+/// to "redpen" one millisecond into the capture. Firing ⌘C before the show has landed means
+/// racing that activation, and losing the race is the "nothing was copied" bug.
+static SHOWN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+pub fn shows_so_far() -> u64 {
+    SHOWN.load(Ordering::Acquire)
+}
+
+/// Wait for a show requested after `seen` to complete.
+pub fn wait_for_show(seen: u64, budget: std::time::Duration) {
+    let deadline = std::time::Instant::now() + budget;
+    while shows_so_far() == seen && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+}
+
 pub fn show(app: &AppHandle) {
     let started = std::time::Instant::now();
     let handle = app.clone();
-    let _ = app.run_on_main_thread(move || match handle.get_webview_panel(LABEL) {
-        Ok(panel) => {
-            panel.order_front_regardless();
-            // Guardrail C1: hotkey → visible panel < 300 ms.
-            println!("[redpen] panel visible in {} ms", started.elapsed().as_millis());
-        }
-        Err(_) => {
-            if let Some(window) = handle.get_webview_window(LABEL) {
-                let _ = window.show();
+    let _ = app.run_on_main_thread(move || {
+        match handle.get_webview_panel(LABEL) {
+            Ok(panel) => {
+                panel.order_front_regardless();
+                // Guardrail C1: hotkey → visible panel < 300 ms.
+                println!("[redpen] panel visible in {} ms", started.elapsed().as_millis());
+            }
+            Err(_) => {
+                if let Some(window) = handle.get_webview_window(LABEL) {
+                    let _ = window.show();
+                }
             }
         }
+        SHOWN.fetch_add(1, Ordering::Release);
     });
 }
 
@@ -191,11 +215,193 @@ fn screen_for_point(point: NSPoint, mtm: MainThreadMarker) -> Option<objc2::rc::
 // ---------------------------------------------------------------------------------------
 
 use block2::RcBlock;
-use objc2_app_kit::{NSEventMask, NSRunningApplication, NSWorkspace};
+use objc2_app_kit::{NSApplicationActivationOptions, NSEventMask, NSRunningApplication, NSWorkspace};
 use std::ptr::NonNull;
+use std::sync::atomic::{AtomicI32, Ordering};
 
 /// Escape's virtual keycode. Layout-independent, like the copy keycode in `capture.rs`.
 const KEYCODE_ESCAPE: u16 = 53;
+
+// ---------------------------------------------------------------------------------------
+// Focus hand-back
+// ---------------------------------------------------------------------------------------
+
+/// The app that owned focus before redpen did, so we can give it back.
+///
+/// **Why this exists.** Capture synthesises ⌘C, which macOS delivers to whatever app is
+/// *active* — not to whatever window is on top. If redpen is the active app, the ⌘C lands
+/// on our own panel, which has no selection: nothing reaches the pasteboard and capture
+/// times out reporting "nothing was copied (secure input, or no selection)". Diagnosed from
+/// a trace where the one failing press read `frontmost="redpen"` and five successful ones
+/// read `frontmost="PhpStorm-EAP"`.
+///
+/// The whole of Epic B stops the panel *taking* focus, and it works — showing the panel is
+/// not what activates us. But two ordinary things still do, and neither goes through the
+/// panel at all:
+///
+/// 1. **Opening the tray menu.** Clicking a status item activates its app.
+/// 2. **Launching.** Every `tauri dev` rebuild restarts the app active.
+///
+/// Either way we stay active until the user clicks another app — so the *next* hotkey press
+/// fails, and the one after it works because the failure made the user click back into
+/// their editor. That is the "only the first press fails" report.
+static PREVIOUS_APP: AtomicI32 = AtomicI32::new(0);
+
+/// A hand-back we performed ourselves, and the moment we asked for it. `Some((0, _))` means
+/// "whichever app macOS picks".
+///
+/// Without this the fix would defeat itself: handing focus back posts
+/// `NSWorkspaceDidActivateApplication`, which the dismissal observer reads as "the user has
+/// gone somewhere else" and hides the panel. The panel would flash and vanish on precisely
+/// the presses this is meant to repair. The window is short so that a *real* app switch a
+/// moment later still dismisses normally.
+static HANDBACK: std::sync::Mutex<Option<(i32, std::time::Instant)>> = std::sync::Mutex::new(None);
+
+const HANDBACK_GRACE: std::time::Duration = std::time::Duration::from_millis(1500);
+
+/// True if this activation is the one we just asked for, and consumes it.
+fn is_our_handback(activated_pid: Option<i32>) -> bool {
+    let mut slot = match HANDBACK.lock() {
+        Ok(g) => g,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    match *slot {
+        Some((pid, at)) if at.elapsed() < HANDBACK_GRACE && (pid == 0 || Some(pid) == activated_pid) => {
+            *slot = None;
+            true
+        }
+        Some((_, at)) if at.elapsed() >= HANDBACK_GRACE => {
+            *slot = None;
+            false
+        }
+        _ => false,
+    }
+}
+
+fn expect_handback(pid: i32) {
+    if let Ok(mut slot) = HANDBACK.lock() {
+        *slot = Some((pid, std::time::Instant::now()));
+    }
+}
+
+fn our_pid() -> i32 {
+    NSRunningApplication::currentApplication().processIdentifier()
+}
+
+#[link(name = "ApplicationServices", kind = "framework")]
+extern "C" {
+    fn CGWindowListCopyWindowInfo(
+        option: u32,
+        relative_to: u32,
+    ) -> *mut objc2_foundation::NSArray<objc2_foundation::NSDictionary>;
+}
+
+/// `kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements`, and the window
+/// list is returned strictly front-to-back.
+const WINDOW_LIST_OPTIONS: u32 = (1 << 0) | (1 << 4);
+
+/// Whoever owns the frontmost ordinary window that is not ours — the app the user was
+/// looking at, and whose selection they mean.
+///
+/// This is ground truth rather than history, which is the whole point: `PREVIOUS_APP` only
+/// knows about app switches it *observed*, and the case that actually bites has none to
+/// observe. redpen comes up active on launch (every `tauri dev` rebuild), the user never
+/// clicks away because their selection is already made, and so the first press finds an
+/// empty memory and copies from our own panel.
+///
+/// Layer 0 is the ordinary window layer. Filtering on it skips the menu bar, the Dock, and
+/// status items — and would skip our own panel too, which sits at the floating level, though
+/// this runs before the panel is shown anyway.
+fn app_behind_us() -> Option<i32> {
+    use objc2_foundation::{NSNumber, NSString};
+
+    let ours = our_pid();
+    let windows = unsafe {
+        let ptr = CGWindowListCopyWindowInfo(WINDOW_LIST_OPTIONS, 0);
+        objc2::rc::Retained::from_raw(ptr)?
+    };
+
+    let layer_key = NSString::from_str("kCGWindowLayer");
+    let pid_key = NSString::from_str("kCGWindowOwnerPID");
+
+    for window in windows.iter() {
+        let number = |key: &NSString| {
+            window
+                .objectForKey(key)
+                .and_then(|v| v.downcast::<NSNumber>().ok())
+                .map(|n| n.as_i64())
+        };
+        if number(&layer_key) != Some(0) {
+            continue;
+        }
+        match number(&pid_key) {
+            Some(pid) if pid as i32 != ours && pid > 0 => return Some(pid as i32),
+            _ => continue,
+        }
+    }
+    None
+}
+
+/// Is redpen the active application — i.e. would a synthetic ⌘C land on our own panel?
+pub fn is_frontmost() -> bool {
+    NSWorkspace::sharedWorkspace()
+        .frontmostApplication()
+        .map(|a| a.processIdentifier() == our_pid())
+        .unwrap_or(false)
+}
+
+/// Hand focus back to the app the user was actually typing in.
+///
+/// Note this only ever *restores* activation, never steals it: it does nothing unless we
+/// are already wrongly active, so it cannot violate the Epic B guarantee.
+///
+/// `ActivateIgnoringOtherApps` is deliberately not used — it is deprecated and inert from
+/// macOS 14 on. Plain activation is what works now.
+pub fn yield_focus_to_source(app: &AppHandle) {
+    let _ = app.run_on_main_thread(move || {
+        if !is_frontmost() {
+            return;
+        }
+        // Window order first, remembered app second. The order matters: the memory is empty
+        // in exactly the case that fails.
+        let target = app_behind_us().or_else(|| match PREVIOUS_APP.load(Ordering::Relaxed) {
+            pid if pid > 0 => Some(pid),
+            _ => None,
+        });
+
+        if let Some(pid) = target {
+            if let Some(previous) = NSRunningApplication::runningApplicationWithProcessIdentifier(pid) {
+                expect_handback(pid);
+                let name = previous.localizedName().map(|n| n.to_string()).unwrap_or_default();
+                let ok = previous.activateWithOptions(NSApplicationActivationOptions::empty());
+                println!("[redpen] handing focus back to {name:?} (pid {pid}) · accepted={ok}");
+                if ok {
+                    return;
+                }
+            }
+        }
+        // Last resort: relinquish and let macOS pick the successor. Weaker than activating a
+        // named app — we cannot say which pid to expect — but it beats copying from our own
+        // panel.
+        println!("[redpen] no app to hand focus back to; deactivating");
+        expect_handback(0);
+        objc2_app_kit::NSApplication::sharedApplication(
+            objc2_foundation::MainThreadMarker::new().expect("run_on_main_thread"),
+        )
+        .deactivate();
+    });
+}
+
+/// Block until we are no longer the active app. Called off the hotkey thread, just before
+/// the ⌘C goes out, because `yield_focus_to_source` is asynchronous — the activation is a
+/// round trip through the window server, and firing ⌘C before it lands would copy from the
+/// panel anyway.
+pub fn wait_until_not_frontmost(budget: std::time::Duration) {
+    let deadline = std::time::Instant::now() + budget;
+    while is_frontmost() && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+}
 
 /// Install the three dismissal paths.
 ///
@@ -280,6 +486,16 @@ where
                     running.processIdentifier()
                 })
         };
+        // Anyone but us is a candidate to hand focus back to later.
+        if let Some(pid) = activated_pid {
+            if pid != our_pid {
+                PREVIOUS_APP.store(pid, Ordering::Relaxed);
+            }
+        }
+        // Our own hand-back is not the user walking away, so it must not dismiss.
+        if is_our_handback(activated_pid) {
+            return;
+        }
         if activated_pid != Some(our_pid) && v() {
             d();
         }
@@ -293,6 +509,15 @@ where
             &switch_block,
         )
     };
+
+    // Seed it, or the very first press after launch has nobody to hand focus back to —
+    // and that press is exactly the one that fails.
+    if let Some(front) = NSWorkspace::sharedWorkspace().frontmostApplication() {
+        let pid = front.processIdentifier();
+        if pid != our_pid {
+            PREVIOUS_APP.store(pid, Ordering::Relaxed);
+        }
+    }
 
     // These must outlive the call or the monitors deregister immediately. They are meant to
     // live for the whole process, so leaking them is the correct lifetime, not a shortcut.

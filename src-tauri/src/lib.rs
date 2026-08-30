@@ -128,26 +128,47 @@ pub fn run() {
                         //
                         // panel::* hop to the main thread internally; AppKit window calls
                         // from this thread are a hard crash (decision #28).
+                        //
+                        // The claim above is *almost* true, and the gap is the first-press
+                        // bug: the panel's very first show does activate us (12 ms of work
+                        // and a frontmost that flips to "redpen"; 0 ms and no flip on every
+                        // show after). So the focus check cannot live here, before the show
+                        // — it has to run per ⌘C attempt, below.
+                        let shows_before = panel::shows_so_far();
                         panel::position_at_mouse(&app);
                         panel::show(&app);
                         let _ = app.emit(llm::EVENT_START, ());
 
-                        std::thread::spawn(move || match capture::selection() {
-                            Ok(text) => {
-                                println!("[redpen] captured {} chars{}", text.chars().count(), preview(&text));
-                                let loaded = app.state::<ConfigStore>().current();
-                                let handle = tauri::async_runtime::spawn(llm::run(
-                                    app.clone(),
-                                    loaded,
-                                    text,
-                                ));
-                                app.state::<InFlight>().set(handle);
-                            }
-                            Err(e) => {
-                                // The panel is already up, so this reaches the user rather
-                                // than only the log.
-                                eprintln!("[redpen] capture failed: {e}");
-                                let _ = app.emit(llm::EVENT_ERROR, e.to_string());
+                        std::thread::spawn(move || {
+                            // Let the show land first. Its *first* run activates the app, so
+                            // firing ⌘C before then races an activation we are about to have
+                            // to undo — and losing that race is the whole bug.
+                            panel::wait_for_show(shows_before, std::time::Duration::from_millis(250));
+
+                            let focus_app = app.clone();
+                            match capture::selection(move || {
+                                // Re-checked before every attempt, because the panel may have
+                                // stolen focus since the last one. A no-op unless we really
+                                // are the active app.
+                                panel::yield_focus_to_source(&focus_app);
+                                panel::wait_until_not_frontmost(std::time::Duration::from_millis(250));
+                            }) {
+                                Ok(text) => {
+                                    println!("[redpen] captured {} chars{}", text.chars().count(), preview(&text));
+                                    let loaded = app.state::<ConfigStore>().current();
+                                    let handle = tauri::async_runtime::spawn(llm::run(
+                                        app.clone(),
+                                        loaded,
+                                        text,
+                                    ));
+                                    app.state::<InFlight>().set(handle);
+                                }
+                                Err(e) => {
+                                    // The panel is already up, so this reaches the user
+                                    // rather than only the log.
+                                    eprintln!("[redpen] capture failed: {e}");
+                                    let _ = app.emit(llm::EVENT_ERROR, e.to_string());
+                                }
                             }
                         });
                     })
