@@ -20,9 +20,9 @@ copy the clean version, ship it, and make the same mistake next week. redpen sho
 *mechanism* — "Russian *зависеть от* carries the *from* across; English `depend` takes
 `on`" — because a rule you understand is one you carry into the next message.
 
-It looks for **foreignness**, not errors. "I have a possibility to join tomorrow" breaks no
-grammar rule and is instantly non-native; that gap is the product. A spellchecker already
-caught everything else.
+What it flags is **foreignness**. "I have a possibility to join tomorrow" breaks no grammar
+rule and is instantly non-native; that gap is the product. A spellchecker already caught
+everything else.
 
 ## Install
 
@@ -60,7 +60,7 @@ The card never takes keyboard focus, so your cursor stays exactly where it was �
 read the note and keep typing in the app you were already in.
 
 Your clipboard is put back the way it was afterwards. If a clipboard manager is running,
-redpen backs off rather than fighting it.
+redpen skips the restore and leaves your history to it.
 
 ## Configuring
 
@@ -71,7 +71,7 @@ Everything lives in `~/Library/Application Support/redpen/config.json`, and edit
 |---|---|
 | `api_key` | Your Anthropic API key |
 | `model` | Which model critiques the text |
-| `effort` | How hard it thinks — `low`, `medium`, `high`, `xhigh`, `max`. A latency lever, not a quality tier |
+| `effort` | How hard it thinks — `low`, `medium`, `high`, `xhigh`, `max`. Trades speed for depth |
 | `hotkey` | Defaults to `Alt+Cmd+E`; rebinds live |
 | `font_size` | Base size for the card, in points — everything scales off it |
 | `system_prompt_path` | Point this at your own prompt file to change what gets flagged |
