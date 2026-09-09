@@ -1,6 +1,6 @@
 [package]
 name = "redpen"
-version = "0.1.0"
+version = "0.1.1"
 description = "Critique-only English coach for a Russian L1 writer"
 authors = ["Roman Pronskiy"]
 edition = "2021"
