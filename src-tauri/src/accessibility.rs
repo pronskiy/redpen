@@ -4,9 +4,12 @@
 //! fails on every press with a message nobody reads until they are already confused — so
 //! check up front and say so.
 //!
-//! The permission is tied to the *signed binary*, so a rebuild or an app update revokes it
-//! and everything silently stops working. That is a documented dev annoyance (README) and
-//! the reason the onboarding text mentions re-granting.
+//! macOS keys the grant to the bundle's designated requirement, and what lands in that
+//! requirement depends on the signature. Ad-hoc — every release, and any build that skips
+//! `scripts/dev-cert.sh` — puts the binary hash there, so a rebuild or an update revokes
+//! the grant and everything silently stops working. Signing with a certificate moves the
+//! requirement onto the certificate, which does not change between builds. See README,
+//! "The permission annoyance". The onboarding text mentions re-granting either way.
 
 #[cfg(target_os = "macos")]
 #[link(name = "ApplicationServices", kind = "framework")]

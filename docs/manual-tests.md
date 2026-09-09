@@ -13,7 +13,8 @@ tail -f /tmp/redpen-dev.log | grep --line-buffered redpen
 Select text, press ⌥⌘E, and record what the log printed.
 
 > **Re-run this whole file after every Tauri or plugin bump**, and any time macOS revokes
-> Accessibility permission — which it does on rebuild (see README).
+> Accessibility permission — which it does on every rebuild unless the build was signed
+> with the dev certificate (see README, "The permission annoyance").
 
 Date run: **2026-08-26** · Build: `ec2e33c` (dev) · Run by: **Roman**
 
@@ -88,7 +89,8 @@ politely*, never hang.
 |-------|--------|-------|
 | Without Accessibility permission, the error names the fix | ✅ | verified 2026-08-26: `could not send ⌘C: the application does not have the permission to simulate input (check Accessibility permission)` |
 | After granting, capture works without a restart | ✅ | verified 2026-08-26 |
-| After a rebuild, permission state | ✅ | expected to reset; record what actually happens |
+| After an ad-hoc rebuild, permission state | ✅ | expected to reset; record what actually happens |
+| After a rebuild signed by `scripts/dev-cert.sh`, permission state | 🔲 | expected to survive: the requirement names the cert, not the hash |
 
 ## 5. Updates — tray "Check for Updates…"
 

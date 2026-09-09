@@ -105,6 +105,7 @@ a small TypeScript webview for the card.
 prompts/critique.md    the system prompt — the actual product
 evals/run.sh           prompt × corpus → rating sheet (bash + curl, no Rust)
 docs/corpus/           real texts to test the prompt against; gitignored, stays local
+scripts/               icon build, clipboard check, dev signing identity
 src-tauri/             the Rust app
 src/, index.html       the webview
 ```
@@ -132,10 +133,33 @@ permission, and real apps to steal a selection from.
 
 ## The permission annoyance
 
-macOS ties Accessibility permission to the exact binary, so **every rebuild can reset it**
-and the simulated ⌘C stops working silently. When capture mysteriously returns nothing,
-re-grant under System Settings → Privacy & Security → Accessibility before debugging
-anything else.
+macOS keys the Accessibility grant to the app's *designated requirement*, and what sits in
+that requirement depends on how the app is signed. With no certificate — ad-hoc, which is
+what a plain `tauri build` and every release produce — the requirement is the binary hash,
+so the next build stops matching and the simulated ⌘C goes quiet. Sign with a certificate
+and the requirement moves onto the certificate, which does not change between builds.
+
+```sh
+scripts/dev-cert.sh       # once: a self-signed code-signing identity
+scripts/build-macos.sh    # build with it, in place of `npm run tauri build`
+```
+
+That is not an Apple identity and buys nothing on anyone else's machine — it only stops
+your own rebuilds from revoking your own grant.
+
+**`tauri dev` proves nothing here.** A dev build runs as a child of your terminal or IDE,
+and macOS attributes the Accessibility check to that parent, so it inherits whatever grant
+PhpStorm or Terminal already holds and reports itself trusted without ever having a grant
+of its own. The built app is its own responsible process and gets no such help. Test
+permission behaviour against a real bundle.
+
+When a grant does break, toggling the checkbox off and on will not fix it — macOS updates
+the existing row without recomputing its requirement. Delete the row with **−** and re-add
+the app, or:
+
+```sh
+tccutil reset Accessibility com.pronskiy.redpen
+```
 
 ## Releasing
 

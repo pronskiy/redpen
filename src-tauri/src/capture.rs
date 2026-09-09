@@ -48,7 +48,7 @@ pub enum CaptureError {
     /// Text, but only whitespace.
     EmptySelection,
     /// Could not synthesise the keystroke at all. Nearly always missing Accessibility
-    /// permission, which macOS revokes on rebuild.
+    /// permission, which macOS drops on rebuild unless the bundle carries a certificate.
     Keystroke(String),
 }
 

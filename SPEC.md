@@ -327,7 +327,7 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 | Focus stealing regressions (the two-path problem) | Med | High | Guardrail B1 is explicit about it; manual test on every Tauri/plugin bump |
 | Clipboard managers racing the snapshot/restore | Med | Med | changeCount discipline from A1.3; tested against Raycast clipboard history in guardrail A1 |
 | Secure-input fields blocking synthetic ⌘C | High | Low | Graceful 2 s timeout with a human-readable error; documented limitation |
-| Accessibility permission reset after each dev rebuild | High | Low (annoyance) | Documented in README dev section; stable signing identity reduces it |
+| Accessibility permission reset after each dev rebuild | High | Low (annoyance) | Closed for local builds by `scripts/dev-cert.sh`: a certificate moves the designated requirement off the binary hash, so one grant survives every later build. Releases stay ad-hoc and still reset on update — that needs a Developer ID |
 | Apple ships a "teach me" / learner mode in Writing Tools | Low | High | Personal tool, not a business — impact is motivational, not financial. Journal + own-prompt control remain out of Apple's scope; re-evaluate at each WWDC |
 
 ---
