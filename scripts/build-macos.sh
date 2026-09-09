@@ -6,9 +6,8 @@
 # bundle. Sealed is not the same as stable: an ad-hoc signature has no certificate, so its
 # designated requirement is the binary hash and this build's Accessibility grant dies with
 # the next build. `scripts/dev-cert.sh` fixes that, and this picks the identity up when it
-# is there. The identity is passed as a config override rather than APPLE_SIGNING_IDENTITY
-# so it wins over the value in tauri.conf.json without depending on which one Tauri
-# prefers.
+# is there. APPLE_SIGNING_IDENTITY overrides the value in tauri.conf.json — verified, not
+# assumed — which is the same lever release.yml pulls in CI.
 
 set -euo pipefail
 
@@ -16,8 +15,7 @@ IDENTITY="${REDPEN_SIGNING_IDENTITY:-redpen dev}"
 
 if security find-identity -p codesigning | grep -qF "$IDENTITY"; then
   echo "==> signing with '$IDENTITY' — the Accessibility grant survives this rebuild"
-  exec npm run tauri -- build \
-    --config "{\"bundle\":{\"macOS\":{\"signingIdentity\":\"$IDENTITY\"}}}" "$@"
+  APPLE_SIGNING_IDENTITY="$IDENTITY" exec npm run tauri -- build "$@"
 fi
 
 cat >&2 <<MSG

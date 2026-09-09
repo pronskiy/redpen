@@ -83,9 +83,11 @@ the live config has to be strict JSON.
 
 Menu bar icon → **Check for Updates…**
 
-If your copy is not signed with a Developer ID, the card says so before offering to
-install, because replacing the binary makes macOS revoke the Accessibility permission and
-capture stops working until you grant it again.
+Releases are signed with a certificate, which is what lets your Accessibility permission
+survive the update — macOS ties the grant to the certificate rather than to the binary, and
+the certificate is the same one every release. If you are running a build that lacks it, the
+card says so before offering to install, because then replacing the binary does revoke the
+permission and capture stops working until you grant it again.
 
 ---
 
@@ -105,7 +107,7 @@ a small TypeScript webview for the card.
 prompts/critique.md    the system prompt — the actual product
 evals/run.sh           prompt × corpus → rating sheet (bash + curl, no Rust)
 docs/corpus/           real texts to test the prompt against; gitignored, stays local
-scripts/               icon build, clipboard check, dev signing identity
+scripts/               icon build, clipboard check, signing identities, macOS build
 src-tauri/             the Rust app
 src/, index.html       the webview
 ```
@@ -135,9 +137,10 @@ permission, and real apps to steal a selection from.
 
 macOS keys the Accessibility grant to the app's *designated requirement*, and what sits in
 that requirement depends on how the app is signed. With no certificate — ad-hoc, which is
-what a plain `tauri build` and every release produce — the requirement is the binary hash,
-so the next build stops matching and the simulated ⌘C goes quiet. Sign with a certificate
-and the requirement moves onto the certificate, which does not change between builds.
+what a plain `tauri build` produces — the requirement is the binary hash, so the next build
+stops matching and the simulated ⌘C goes quiet. Sign with a certificate and the requirement
+moves onto the certificate, which does not change between builds. (Releases get this from
+CI; locally it is on you.)
 
 ```sh
 scripts/dev-cert.sh       # once: a self-signed code-signing identity
@@ -168,4 +171,12 @@ universal binary and opens a draft release; the update endpoint stays dark until
 publish it.
 
 Bump the version in `tauri.conf.json`, `package.json` and `Cargo.toml` together — the
-release workflow refuses a tag that disagrees with any of them.
+release workflow refuses a tag that disagrees with any of them. `package-lock.json` and
+`Cargo.lock` carry the version too, and `npm ci` fails on a lockfile that disagrees.
+
+Releases are signed with the certificate in the `MACOS_CERT_P12` / `MACOS_CERT_PASSWORD`
+secrets, made once by `scripts/release-cert.sh`. **Never regenerate it without meaning to**:
+the designated requirement names that certificate, so a new one makes every existing user
+re-grant Accessibility. Without the secrets the build still succeeds, ad-hoc, with a warning
+in the log. None of this is Apple signing — Gatekeeper still blocks a first launch, which is
+what the install instructions at the top are for.

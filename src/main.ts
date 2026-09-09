@@ -262,9 +262,9 @@ listen<Update>("update-available", (e) => {
   // macOS cannot tie to a stable signing identity, replacing the binary drops the
   // Accessibility grant and ⌥⌘E goes quiet with no visible cause.
   const warning = u.unsigned
-    ? `<p class="tell"><strong>This build isn't Developer ID signed.</strong> Installing will
-         replace the binary, and macOS will revoke redpen's Accessibility permission — you'll
-         have to grant it again before capture works.</p>`
+    ? `<p class="tell"><strong>This build isn't signed with a certificate.</strong> Installing
+         will replace the binary, and macOS will revoke redpen's Accessibility permission —
+         you'll have to grant it again before capture works.</p>`
     : "";
   updateCard(
     "Update available",

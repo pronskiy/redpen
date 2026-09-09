@@ -34,20 +34,25 @@ pub struct Available {
     pub current: String,
     pub notes: Option<String>,
     /// Set when installing this update would cost the Accessibility grant — see
-    /// `is_developer_id_signed`. The panel turns it into a warning above the button.
+    /// `grant_survives_update`. The panel turns it into a warning above the button.
     pub unsigned: bool,
 }
 
-/// macOS keys the Accessibility grant to the app's *designated requirement*. On a Developer
-/// ID signed bundle that requirement is the signing identity, so the grant survives a
-/// replaced binary; on an unsigned or ad-hoc signed one it is the binary hash itself, and
-/// any update revokes it. Capture then fails silently until it is granted again — the exact
-/// failure the SPEC already records for rebuilds ("macOS ties it to the exact binary").
+/// macOS keys the Accessibility grant to the app's *designated requirement*, and what sits
+/// in that requirement decides whether an update costs the grant. A certificate-signed
+/// bundle names the certificate, which every release shares, so the grant carries across
+/// the replaced binary. An ad-hoc one names the binary hash instead, which every build
+/// changes, so installing revokes the grant and capture fails silently until the user
+/// grants it again.
 ///
 /// So this is asked *before* offering Install, and the answer is shown, rather than letting
 /// the user find out by pressing ⌥⌘E and getting nothing.
+///
+/// Releases carry the certificate from `scripts/release-cert.sh` (see release.yml), so this
+/// is normally true. It goes false for an ad-hoc bundle — a local `npm run tauri build`
+/// that skipped `scripts/dev-cert.sh`, or a release built before the secret existed.
 #[cfg(target_os = "macos")]
-fn is_developer_id_signed() -> bool {
+fn grant_survives_update() -> bool {
     let Ok(exe) = std::env::current_exe() else { return false };
     // `redpen.app/Contents/MacOS/redpen` -> `redpen.app`. Under `cargo run` there is no
     // bundle above the binary, the filter fails, and codesign reports it unsigned — which
@@ -61,16 +66,19 @@ fn is_developer_id_signed() -> bool {
         .unwrap_or(exe);
 
     std::process::Command::new("/usr/bin/codesign")
-        .args(["-dv", "--verbose=2"])
+        .args(["-d", "-r-"])
         .arg(&target)
         .output()
-        // codesign writes its report to stderr, including on success.
-        .map(|o| String::from_utf8_lossy(&o.stderr).contains("Authority=Developer ID Application"))
+        // `-r-` prints the requirement on *stdout* — unlike the rest of codesign's report,
+        // which goes to stderr. A requirement naming a certificate (`certificate leaf = H"…"`
+        // self-signed, `certificate leaf[subject.CN]` for a Developer ID) survives a new
+        // binary; `cdhash H"…"` does not.
+        .map(|o| String::from_utf8_lossy(&o.stdout).contains("certificate"))
         .unwrap_or(false)
 }
 
 #[cfg(not(target_os = "macos"))]
-fn is_developer_id_signed() -> bool {
+fn grant_survives_update() -> bool {
     true
 }
 
@@ -96,7 +104,7 @@ async fn check(app: &AppHandle) -> Result<Option<Available>, String> {
                 version: update.version.clone(),
                 current: update.current_version.clone(),
                 notes: update.body.clone(),
-                unsigned: !is_developer_id_signed(),
+                unsigned: !grant_survives_update(),
             };
             *app.state::<Pending>().0.lock().expect("pending lock poisoned") = Some(update);
             Ok(Some(info))

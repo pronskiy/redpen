@@ -56,16 +56,70 @@ jobs:
 
       - run: npm ci
 
+      # macOS keys the Accessibility grant to the app's designated requirement. Ad-hoc puts
+      # the binary hash in there, so every update revokes the grant of everyone who already
+      # had one. Signing with a certificate moves the requirement onto the certificate,
+      # which does not change between releases, so one grant covers every future update.
+      #
+      # Not an Apple identity — Gatekeeper is unaffected and the first launch still needs
+      # the README's quarantine step. Made by scripts/release-cert.sh.
+      - name: Import the release signing certificate
+        id: signing
+        env:
+          CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          # Guarded here rather than in `if:` — the secrets context is not dependable in a
+          # step condition. No certificate is not an error: the build falls back to the
+          # ad-hoc seal, which still beats the unsigned bundle 0.1.0 shipped with.
+          if [ -z "${CERT_P12:-}" ]; then
+            echo "::warning::MACOS_CERT_P12 is unset — this release will be ad-hoc signed," \
+                 "so installing it revokes every existing user's Accessibility grant."
+            exit 0
+          fi
+
+          keychain="$RUNNER_TEMP/redpen-signing.keychain-db"
+          pw=$(openssl rand -hex 20)
+
+          security create-keychain -p "$pw" "$keychain"
+          # The runner is ephemeral, but an auto-relock mid-build would fail the signing.
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$pw" "$keychain"
+
+          printf '%s' "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$CERT_PASSWORD" \
+            -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/cert.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$pw" "$keychain" >/dev/null
+
+          # codesign only looks at the search list, so the new keychain has to join it.
+          security list-keychains -d user -s "$keychain" \
+            $(security list-keychains -d user | tr -d '"')
+
+          # No -v: the certificate is deliberately self-signed and therefore untrusted,
+          # which does not stop codesign from signing with it.
+          name=$(security find-identity -p codesigning "$keychain" \
+                 | sed -n 's/.*"\(.*\)".*/\1/p' | head -1)
+          test -n "$name"
+          echo "identity=$name" >> "$GITHUB_OUTPUT"
+          echo "Signing releases as '$name'"
+
       # tauri.conf.json's beforeBuildCommand runs `npm run build`, so the frontend is
       # built by this step rather than a separate one.
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Signs redpen.app.tar.gz with the minisign key so the updater will accept it.
-          # This is *not* Apple code signing — Gatekeeper still sees an ad-hoc bundle, and
-          # installing an update still costs the Accessibility grant. See update.rs.
+          # This is *not* Apple code signing — see the certificate step above for that.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Overrides tauri.conf.json's `"signingIdentity": "-"`. Empty when the secret is
+          # unset, and Tauri then falls back to the config's ad-hoc seal rather than
+          # failing the build.
+          APPLE_SIGNING_IDENTITY: ${{ steps.signing.outputs.identity }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: redpen __VERSION__
