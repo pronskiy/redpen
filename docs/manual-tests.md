@@ -90,7 +90,7 @@ politely*, never hang.
 | Without Accessibility permission, the error names the fix | ✅ | verified 2026-08-26: `could not send ⌘C: the application does not have the permission to simulate input (check Accessibility permission)` |
 | After granting, capture works without a restart | ✅ | verified 2026-08-26 |
 | After an ad-hoc rebuild, permission state | ✅ | expected to reset; record what actually happens |
-| After a rebuild signed by `scripts/dev-cert.sh`, permission state | 🔲 | expected to survive: the requirement names the cert, not the hash |
+| After a rebuild signed by `scripts/dev-cert.sh`, permission state | ✅ | verified 2026-09-09: cdhash `86e882a7` → `444f628b` → `86e882a7` across two rebuild-and-reinstall cycles, grant held, System Settings never touched |
 
 ## 5. Updates — tray "Check for Updates…"
 
