@@ -36,6 +36,14 @@
   // f64 is not Eq.
   "font_size": 15,
 
+  // How a correction is drawn in your line. Each one strikes what you wrote in red; they
+  // differ in where the green fix goes:
+  //   "pen"     written small above the struck words, like a teacher's mark (default)
+  //   "inline"  right after the struck words, in the line
+  //   "tinted"  like inline, on a coloured background so a one-letter fix can't hide
+  // Anything else falls back to "pen".
+  "correction_style": "pen",
+
   // Path to the system prompt, kept as a real Markdown file you edit in a real editor.
   // A 141-line prompt inlined as an escaped JSON string would be unreadable and
   // uneditable, so this field holds a path. Point it at your own checkout — then the repo

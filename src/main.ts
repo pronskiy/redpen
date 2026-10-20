@@ -5,12 +5,20 @@ const out = document.querySelector<HTMLElement>("#critique")!;
 const status = document.querySelector<HTMLElement>("#status")!;
 
 let buffer = "";
+/** Until critique-done, the last line of the buffer may be cut off mid-word. */
+let streamDone = false;
+/** Whether the card is showing a critique, so a live style change knows it may redraw. */
+let showingCritique = false;
+
+type CorrectionStyle = "pen" | "inline" | "tinted";
+let style: CorrectionStyle = "pen";
+document.body.dataset.corrections = style;
 
 /** Everything here is model output quoting the user's selection — never trust it as HTML. */
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-type Note = { quote: string; tell: string; natives: string[] };
+type Note = { quote: string; tell: string; natives: string[]; nativeDone: boolean };
 
 /**
  * Parse the prompt's own output shape rather than rendering generic markdown: the layout
@@ -21,19 +29,25 @@ type Note = { quote: string; tell: string; natives: string[] };
  *   > "<fragment>"
  *   **Tell** — <mechanism>
  *   **Native** — "<version>" · "<alternative>"
+ *
+ * `nativeDone` holds the diff back while the rewrite is still streaming. Diffed half-way,
+ * "requires an" against the quote "requires RFC" strikes RFC for a few frames and then takes
+ * it back. The last line counts as finished once the stream has ended.
  */
-function parse(md: string): { verdict: string; notes: Note[] } {
+function parse(md: string, done: boolean): { verdict: string; notes: Note[] } {
   let verdict = "";
   const notes: Note[] = [];
   let cur: Note | null = null;
 
-  for (const line of md.split("\n")) {
+  const lines = md.split("\n");
+  for (let idx = 0; idx < lines.length; idx++) {
+    const line = lines[idx];
     const v = line.match(/^\*\*Reads as:\*\*\s*(.*)/);
     if (v) { verdict = v[1]; continue; }
 
     if (line.startsWith(">")) {
       const q = line.replace(/^>\s*/, "").replace(/^"|"$/g, "");
-      cur = { quote: q, tell: "", natives: [] };
+      cur = { quote: q, tell: "", natives: [], nativeDone: false };
       notes.push(cur);
       continue;
     }
@@ -43,6 +57,7 @@ function parse(md: string): { verdict: string; notes: Note[] } {
     const n = line.match(/^\*\*Native\*\*\s*[—–-]\s*(.*)/);
     if (n && cur) {
       cur.natives = n[1].split("·").map((x) => x.trim().replace(/^"|"$/g, "")).filter(Boolean);
+      cur.nativeDone = done || idx < lines.length - 1;
       continue;
     }
     // A wrapped Tell line continues the previous one.
@@ -54,7 +69,8 @@ function parse(md: string): { verdict: string; notes: Note[] } {
 const normalize = (w: string) => w.toLowerCase().replace(/[.,!?;:"“”'’]/g, "");
 
 /**
- * Word-level diff by longest common subsequence.
+ * Word-level alignment by longest common subsequence: the pairs [i, j] where quote word i
+ * survives as rewrite word j.
  *
  * Prefix/suffix trimming was not enough: it reports one contiguous span, so any rewrite
  * that touches two separate places marks everything between them as changed. LCS keeps
@@ -63,7 +79,7 @@ const normalize = (w: string) => w.toLowerCase().replace(/[.,!?;:"“”'’]/g,
  *
  * Sentence-length inputs, so the O(n·m) table costs nothing.
  */
-function wordDiff(a: string[], b: string[]) {
+function align(a: string[], b: string[]): [number, number][] {
   const n = a.length, m = b.length;
   const dp: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
   for (let i = n - 1; i >= 0; i--) {
@@ -73,15 +89,66 @@ function wordDiff(a: string[], b: string[]) {
         : Math.max(dp[i + 1][j], dp[i][j + 1]);
     }
   }
-  const kept: boolean[] = new Array(n).fill(false);
-  const added: boolean[] = new Array(m).fill(true);
-  let i = 0, j = 0, changed = 0;
+  const pairs: [number, number][] = [];
+  let i = 0, j = 0;
   while (i < n && j < m) {
-    if (normalize(a[i]) === normalize(b[j])) { kept[i] = true; added[j] = false; i++; j++; }
-    else if (dp[i + 1][j] >= dp[i][j + 1]) { i++; changed++; }
-    else { j++; changed++; }
+    if (normalize(a[i]) === normalize(b[j])) { pairs.push([i, j]); i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) i++;
+    else j++;
   }
-  changed += (n - i) + (m - j);
+  return pairs;
+}
+
+/** Curly against straight quotes is the model's typography, not a correction. */
+const canon = (w: string) => w.replace(/[’‘]/g, "'").replace(/[“”]/g, '"');
+const PUNCT = /^[.,!?;:"'—–-]+$/;
+
+type Hunk = { del: string[]; ins: string[] };
+type Op = { kind: "plain"; html: string } | ({ kind: "hunk" } & Hunk);
+
+/**
+ * Fold the quote and its rewrite into one line, in reading order: the words that stay, and
+ * hunks where a struck run is followed straight away by whatever replaces it. Read the plain
+ * words with the red and you have what was written; with the green, what a native would write.
+ *
+ * Also returns how many quote words stayed, for the caller's is-this-even-an-edit check.
+ */
+function merge(a: string[], b: string[]): { ops: Op[]; kept: number } | null {
+  const pairs = align(a, b);
+  if (!pairs.length) return null;
+
+  const ops: Op[] = [];
+  let kept = pairs.length;
+
+  const plain = (html: string) => ops.push({ kind: "plain", html });
+  const context = (words: string[]) => { kept += words.length; words.forEach((w) => plain(esc(w))); };
+  const hunk = (del: string[], ins: string[]) => {
+    if (!del.length && !ins.length) return;
+    const prev = ops[ops.length - 1];
+    if (prev?.kind === "hunk") { prev.del.push(...del); prev.ins.push(...ins); }
+    else ops.push({ kind: "hunk", del: [...del], ins: [...ins] });
+  };
+
+  // Words that matched once normalised can still differ. Case ("i" -> "I") is a real fix and
+  // swaps the whole word; punctuation colours only the mark itself ("up" -> "up,").
+  const keep = (x: string, y: string, endOfRewrite: boolean) => {
+    const cx = canon(x), cy = canon(y);
+    if (cx === cy) return plain(esc(x));
+    let p = 0;
+    while (p < cx.length && p < cy.length && cx[p] === cy[p]) p++;
+    let s = 0;
+    while (s < cx.length - p && s < cy.length - p && cx[cx.length - 1 - s] === cy[cy.length - 1 - s]) s++;
+    const removed = cx.slice(p, cx.length - s), added = cy.slice(p, cy.length - s);
+    if (!PUNCT.test(removed || ".") || !PUNCT.test(added || ".")) return hunk([x], [y]);
+    // A fragment that stops before the full stop didn't remove it.
+    if (endOfRewrite && !added && s === 0) return plain(esc(x));
+    plain(
+      esc(cx.slice(0, p)) +
+      (removed ? `<del class="punct">${esc(removed)}</del>` : "") +
+      (added ? `<ins class="punct">${esc(added)}</ins>` : "") +
+      esc(cx.slice(cx.length - s))
+    );
+  };
 
   // The rewrite fixes a *fragment*, and the prompt asks for the shortest one that works, so
   // it routinely stops before the end of the quoted span: "Great to see what's cooking in
@@ -92,31 +159,43 @@ function wordDiff(a: string[], b: string[]) {
   // A rewrite that simply ran out is recognisable: the word at its own end is one that
   // matched, so it never reached past there and the quote words beyond it are context. When
   // the rewrite does carry words of its own out there it genuinely replaced them ("previos
-  // submissions" -> "previous submissions"), and the strike stays.
-  const first = kept.indexOf(true), last = kept.lastIndexOf(true);
-  if (first !== -1) {
-    if (!added[0]) for (let k = 0; k < first; k++) { kept[k] = true; changed--; }
-    if (!added[m - 1]) for (let k = last + 1; k < n; k++) { kept[k] = true; changed--; }
+  // submissions" -> "previous submissions"), and the strike stays. So does a rewrite that
+  // ended the sentence on its last word ("this regard?" -> "this?"): it dropped the rest on
+  // purpose.
+  const [li, lj] = pairs[pairs.length - 1];
+  const endsSentence = /[.?!]$/.test(b[lj]) && !/[.?!]$/.test(a[li]);
+  const leadingContext = pairs[0][1] === 0;
+  const trailingContext = lj === b.length - 1 && !endsSentence;
+
+  let pi = 0, pj = 0;
+  pairs.forEach(([i, j], k) => {
+    if (k === 0 && leadingContext) context(a.slice(0, i));
+    else hunk(a.slice(pi, i), b.slice(pj, j));
+    keep(a[i], b[j], j === b.length - 1);
+    pi = i + 1; pj = j + 1;
+  });
+  if (trailingContext) context(a.slice(pi));
+  else hunk(a.slice(pi), b.slice(pj));
+
+  return { ops, kept };
+}
+
+/**
+ * `pen` writes the correction above what it replaces, the way a teacher marks a page, and a
+ * bare insertion gets a caret in the gap. `inline` and `tinted` keep the line flat: struck,
+ * then the fix — they differ only in CSS.
+ */
+function hunkHtml(h: Hunk): string {
+  const d = esc(h.del.join(" ")), i = esc(h.ins.join(" "));
+  if (style === "pen") {
+    // The annotation sits in an inline-block so ruby layout can't justify its words apart
+    // across a wider base.
+    if (d && i) return `<ruby><del>${d}</del><rt><span>${i}</span></rt></ruby>`;
+    if (i) return `<ruby><span class="caret">‸</span><rt><span>${i}</span></rt></ruby>`;
+    return `<del>${d}</del>`;
   }
-
-  return { kept, added, changed };
+  return [d && `<del>${d}</del>`, i && `<ins>${i}</ins>`].filter(Boolean).join(" ");
 }
-
-/** Struck-through where a word was dropped, plain everywhere else. */
-function markRemoved(words: string[], kept: boolean[]): string {
-  return words
-    .map((w, i) => (kept[i] ? esc(w) : `<del>${esc(w)}</del>`))
-    .join(" ");
-}
-
-/** Green only on what is genuinely new — everything you already had stays neutral. */
-function markAdded(words: string[], added: boolean[]): string {
-  return words
-    .map((w, i) => (added[i] ? `<ins>${esc(w)}</ins>` : esc(w)))
-    .join(" ");
-}
-
-const INLINE_MAX_WORDS = 2;
 
 /**
  * Below this share of surviving words, the rewrite is not an edit of the quote — it is a
@@ -134,9 +213,10 @@ function renderNote(note: Note): string {
   const alt = note.natives[1];
   const altHtml = alt ? ` <span class="alt">or “${esc(alt)}”</span>` : "";
 
-  if (!native) {
+  // No rewrite, or not all of it yet: the quote as written. The marks land once, together.
+  if (!native || !note.nativeDone) {
     return `
-      <li class="note stacked">
+      <li class="note">
         <p class="quote">${esc(note.quote)}</p>
         <p class="tell">${esc(note.tell)}</p>
       </li>`;
@@ -144,23 +224,9 @@ function renderNote(note: Note): string {
 
   const aw = note.quote.split(/\s+/).filter(Boolean);
   const bw = native.split(/\s+/).filter(Boolean);
-  const d = wordDiff(aw, bw);
-  const removedHtml = markRemoved(aw, d.kept);
-  const addedHtml = markAdded(bw, d.added);
+  const merged = merge(aw, bw);
 
-  // A tight edit gets the compact form: the line, then just the replacement hanging off it.
-  if (d.changed > 0 && d.changed <= INLINE_MAX_WORDS) {
-    const fix = bw.filter((_, i) => d.added[i]).join(" ");
-    return `
-      <li class="note inline">
-        <p class="quote">${removedHtml}</p>
-        <p class="fix"><span class="elbow">└</span> <ins>${esc(fix || "—")}</ins>
-           <span class="tell">${esc(note.tell)}</span>${altHtml}</p>
-      </li>`;
-  }
-
-  const keptShare = aw.length ? d.kept.filter(Boolean).length / aw.length : 1;
-  if (keptShare < MIN_KEPT_SHARE) {
+  if (!merged || merged.kept / aw.length < MIN_KEPT_SHARE) {
     // Too little in common to call it an edit — no strikethrough, no green.
     return `
       <li class="note stacked">
@@ -170,17 +236,16 @@ function renderNote(note: Note): string {
       </li>`;
   }
 
-  // A restructure needs the whole rewrite — but still only the new words in green.
+  const line = merged.ops.map((op) => (op.kind === "hunk" ? hunkHtml(op) : op.html)).join(" ");
   return `
-    <li class="note stacked">
-      <p class="quote">${removedHtml}</p>
-      <p class="tell">${esc(note.tell)}</p>
-      <p class="native"><span class="elbow">→</span> ${addedHtml}${altHtml}</p>
+    <li class="note">
+      <p class="quote">${line}</p>
+      <p class="tell">${esc(note.tell)}${altHtml}</p>
     </li>`;
 }
 
 function render() {
-  const { verdict, notes } = parse(buffer);
+  const { verdict, notes } = parse(buffer, streamDone);
   // An <ol> even for a single note: render() re-runs on every stream delta, so a list that
   // only appeared once the second note landed would shove the first one sideways mid-stream.
   const list = notes.length ? `<ol class="notes">${notes.map(renderNote).join("")}</ol>` : "";
@@ -194,17 +259,25 @@ function setStatus(text: string, kind: "" | "error" = "") {
   status.dataset.kind = kind;
 }
 
-// Base size comes from config.json and hot-reloads with everything else, so it can be
-// tuned live rather than rebuilt. Everything in the stylesheet is in rem, so setting the
-// root scales the whole card.
-function applyFontSize(px: number) {
-  if (px >= 8 && px <= 40) document.documentElement.style.fontSize = `${px}px`;
+type UiSettings = { font_size: number; correction_style: string };
+
+// Size and correction style come from config.json and hot-reload with everything else, so
+// they can be tuned live rather than rebuilt. Everything in the stylesheet is in rem, so
+// setting the root scales the whole card.
+function applySettings(s: UiSettings) {
+  if (s.font_size >= 8 && s.font_size <= 40) document.documentElement.style.fontSize = `${s.font_size}px`;
+  // A typo in the config draws the default rather than nothing.
+  style = s.correction_style === "inline" || s.correction_style === "tinted" ? s.correction_style : "pen";
+  document.body.dataset.corrections = style;
+  if (showingCritique) render();
 }
-invoke<number>("ui_settings").then(applyFontSize).catch(() => {});
-listen<number>("ui-settings", (e) => applyFontSize(e.payload));
+invoke<UiSettings>("ui_settings").then(applySettings).catch(() => {});
+listen<UiSettings>("ui-settings", (e) => applySettings(e.payload));
 
 listen("critique-start", () => {
   buffer = "";
+  streamDone = false;
+  showingCritique = true;
   out.innerHTML = "";
   setStatus("reading…");
 });
@@ -221,7 +294,12 @@ listen<string>("critique-delta", (e) => {
   render();
 });
 
-listen<string>("critique-done", () => setStatus(""));
+listen<string>("critique-done", () => {
+  setStatus("");
+  // The final Native line often has no newline after it, so it is only diffed now.
+  streamDone = true;
+  render();
+});
 listen<string>("critique-error", (e) => setStatus(e.payload, "error"));
 
 // C1.2: the trailing ```json block is stripped in Rust, so it arrives separately and is
@@ -236,6 +314,7 @@ type Update = { version: string; current: string; notes: string | null; unsigned
 
 /** The panel is the only surface this app has, so an update reuses the card wholesale. */
 function updateCard(title: string, body: string, extra = "") {
+  showingCritique = false;
   out.innerHTML = `
     <p class="verdict">${esc(title)}</p>
     <div class="note stacked">
@@ -284,6 +363,7 @@ listen<number>("update-progress", (e) =>
 // say so once, up front, rather than once per press.
 listen("needs-accessibility", () => {
   setStatus("");
+  showingCritique = false;
   out.innerHTML = `
     <p class="verdict">One permission first</p>
     <div class="note stacked">

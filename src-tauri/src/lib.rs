@@ -32,10 +32,24 @@ fn preview(text: &str) -> String {
 
 /// Dismissing must *abort*, not just hide. A hidden window with a live request keeps
 /// generating tokens you are no longer reading, and billing for them.
+/// The part of the config the card draws with. Sent whole on every change, so the webview
+/// never has to merge partial updates.
+#[derive(Clone, serde::Serialize)]
+struct UiSettings {
+    font_size: u8,
+    correction_style: String,
+}
+
+impl UiSettings {
+    fn of(config: &Config) -> Self {
+        Self { font_size: config.font_size, correction_style: config.correction_style.clone() }
+    }
+}
+
 /// The webview asks for this on load — it cannot rely on an event fired before it existed.
 #[tauri::command]
-fn ui_settings(app: tauri::AppHandle) -> u8 {
-    app.state::<ConfigStore>().current().config.font_size
+fn ui_settings(app: tauri::AppHandle) -> UiSettings {
+    UiSettings::of(&app.state::<ConfigStore>().current().config)
 }
 
 /// C1.4: the onboarding panel's button.
@@ -226,7 +240,14 @@ pub fn run() {
                 }
                 if old.config.font_size != new.config.font_size {
                     println!("[redpen] font size: {} -> {}", old.config.font_size, new.config.font_size);
-                    let _ = handle.emit("ui-settings", new.config.font_size);
+                }
+                if old.config.correction_style != new.config.correction_style {
+                    println!("[redpen] correction style: {} -> {}", old.config.correction_style, new.config.correction_style);
+                }
+                if old.config.font_size != new.config.font_size
+                    || old.config.correction_style != new.config.correction_style
+                {
+                    let _ = handle.emit("ui-settings", UiSettings::of(&new.config));
                 }
                 if old.config.api_key != new.config.api_key {
                     println!("[redpen] api key updated");   // never print the key itself

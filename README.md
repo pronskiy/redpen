@@ -72,6 +72,7 @@ Everything lives in `~/Library/Application Support/redpen/config.json`, and edit
 | `effort` | How hard it thinks — `low`, `medium`, `high`, `xhigh`, `max`. Trades speed for depth |
 | `hotkey` | Defaults to `Alt+Cmd+E`; rebinds live |
 | `font_size` | Base size for the card, in points — everything scales off it |
+| `correction_style` | How a fix is drawn in your line: `pen` (default) writes it above the struck words, `inline` puts it right after them, `tinted` does the same on a coloured background |
 | `system_prompt_path` | Point this at your own prompt file to change what gets flagged |
 | `update_endpoint` | Where update checks look. Empty turns checks off |
 | `base_url` | For an API-compatible proxy |

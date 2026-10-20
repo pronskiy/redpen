@@ -30,6 +30,8 @@
   --control-active: rgba(0, 0, 0, 0.11);
   --removed: #b03a4a;
   --added: #0a7c3e;
+  --removed-wash: rgba(176, 58, 74, 0.11);
+  --added-wash: rgba(10, 124, 62, 0.12);
   --error: #c9314a;
 }
 
@@ -45,6 +47,8 @@
     --control-active: rgba(255, 255, 255, 0.18);
     --removed: #ff8fa0;
     --added: #4ade80;
+    --removed-wash: rgba(255, 143, 160, 0.14);
+    --added-wash: rgba(74, 222, 128, 0.14);
     --error: #ff7a90;
   }
 }
@@ -138,13 +142,32 @@ ins {
   font-weight: 600;
 }
 
-.fix {
-  margin-top: 2px;
-  padding-left: 1.1em;
-  font-size: 0.9rem;
+/* correction_style: "tinted" — the same line on a wash, so a one-letter fix can't hide. */
+[data-corrections="tinted"] :is(del, ins) {
+  padding: 0 3px;
+  margin: 0 -1px;
+  border-radius: 4px;
+  -webkit-box-decoration-break: clone;
 }
+[data-corrections="tinted"] :is(del, ins).punct { padding: 0 1px; }
+[data-corrections="tinted"] del { background: var(--removed-wash); }
+[data-corrections="tinted"] ins { background: var(--added-wash); font-weight: 500; }
 
-
+/* correction_style: "pen" — the fix written above the struck words, as on paper. The line
+   height is fixed rather than left to the ruby, so a quote with nothing above it keeps the
+   same rhythm as one that has. */
+[data-corrections="pen"] .note:not(.stacked) .quote { line-height: 2.15; }
+[data-corrections="pen"] ruby { ruby-position: over; ruby-align: center; }
+[data-corrections="pen"] rt {
+  font-size: 0.78em;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: 0;
+  color: var(--added);
+  padding-bottom: 1px;
+}
+[data-corrections="pen"] rt > span { display: inline-block; white-space: nowrap; }
+.caret { margin: 0 -0.12em; color: var(--added); font-weight: 600; }
 
 .elbow {
   margin-left: -1.1em;
@@ -157,7 +180,10 @@ ins {
   font-size: 0.9rem;
 }
 
-.fix .tell::before { content: "· "; }
+/* Under a corrected line, the explanation sits close: it belongs to the line above. */
+.note:not(.stacked) .tell { margin-top: 3px; }
+
+.note:not(.stacked) .alt::before { content: "· "; }
 
 /* Restructures: the quote reads as the thing being replaced, the rewrite as the answer. */
 .stacked .quote {

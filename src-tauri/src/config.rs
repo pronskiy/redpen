@@ -24,6 +24,11 @@ fn default_update_endpoint() -> String {
 // Integer points, not f64: `Config` derives `Eq` so that hot reload can compare two loads
 // for equality, and f64 is not `Eq`. Half-point control is not worth losing that.
 fn default_font_size() -> u8 { 15 }
+/// How a correction is drawn in the line: `pen` writes it above the struck words, `inline`
+/// puts it right after them, `tinted` does the same on a coloured wash. A string rather
+/// than an enum so a typo degrades to the default in the card instead of failing the whole
+/// parse and costing every other setting.
+fn default_correction_style() -> String { "pen".into() }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
@@ -40,6 +45,8 @@ pub struct Config {
     /// Base size for the card, in points. Everything else scales off it in `rem`.
     #[serde(default = "default_font_size")]
     pub font_size: u8,
+    #[serde(default = "default_correction_style")]
+    pub correction_style: String,
     #[serde(default)]
     pub system_prompt_path: String,
     #[serde(default = "default_update_endpoint")]
@@ -55,6 +62,7 @@ impl Default for Config {
             effort: default_effort(),
             hotkey: default_hotkey(),
             font_size: default_font_size(),
+            correction_style: default_correction_style(),
             system_prompt_path: String::new(),
             update_endpoint: default_update_endpoint(),
         }
@@ -245,6 +253,7 @@ mod tests {
         assert_eq!(c.model, "claude-sonnet-5", "missing keys must not blank out defaults");
         assert_eq!(c.hotkey, "Alt+Cmd+E");
         assert_eq!(c.font_size, 15, "an older config without font_size still works");
+        assert_eq!(c.correction_style, "pen", "an older config without correction_style still works");
     }
 
     #[test]
