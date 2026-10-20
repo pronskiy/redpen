@@ -135,8 +135,13 @@ pub fn run() {
             // A1.2 only logs. A1.3 replaces the body with capture::selection().
             app.handle().plugin(
                 tauri_plugin_global_shortcut::Builder::new()
-                    .with_handler(|_app, _shortcut, event| {
+                    .with_handler(|_app, shortcut, event| {
                         if event.state() != ShortcutState::Pressed {
+                            return;
+                        }
+                        // Only registered while the panel is up (panel::want_escape).
+                        if *shortcut == panel::escape() {
+                            dismiss(_app.clone());
                             return;
                         }
                         // Off the hotkey thread: capture sleeps ~50ms and can poll for a

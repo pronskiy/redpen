@@ -129,6 +129,7 @@ pub fn show(app: &AppHandle) {
         }
         SHOWN.fetch_add(1, Ordering::Release);
     });
+    want_escape(app, true);
 }
 
 pub fn hide(app: &AppHandle) {
@@ -136,6 +137,57 @@ pub fn hide(app: &AppHandle) {
     let _ = app.run_on_main_thread(move || {
         if let Some(window) = handle.get_webview_window(LABEL) {
             let _ = window.hide();
+        }
+    });
+    want_escape(app, false);
+}
+
+// ---------------------------------------------------------------------------------------
+// Esc belongs to the panel while it is up
+// ---------------------------------------------------------------------------------------
+
+use std::sync::atomic::AtomicBool;
+use std::sync::Mutex;
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Shortcut};
+
+/// Plain Esc, no modifiers.
+pub fn escape() -> Shortcut {
+    Shortcut::new(None, Code::Escape)
+}
+
+static ESCAPE_WANTED: AtomicBool = AtomicBool::new(false);
+static ESCAPE_HELD: Mutex<bool> = Mutex::new(false);
+
+/// Register Esc as a hotkey while the panel is up, and give it back the moment it hides.
+///
+/// A monitor can only watch Esc go past, so the press that dismissed the panel also reached
+/// the app underneath — in Slack that meant leaving the conversation. A registered hotkey
+/// consumes the press, so the first Esc only closes redpen. It is released on hide, so the
+/// next one is the app's again (decision #36).
+///
+/// Off-thread on purpose: show and hide are reached from inside the global-shortcut handler
+/// — ⌥⌘E shows, Esc hides — and the plugin keeps its shortcut table locked while a handler
+/// runs, so registering from there takes the same lock and deadlocks. A quick show-hide can
+/// start these threads out of order, so each applies the latest wish rather than its own.
+fn want_escape(app: &AppHandle, wanted: bool) {
+    ESCAPE_WANTED.store(wanted, Ordering::SeqCst);
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let mut held = ESCAPE_HELD.lock().unwrap_or_else(|e| e.into_inner());
+        let wanted = ESCAPE_WANTED.load(Ordering::SeqCst);
+        if *held == wanted {
+            return;
+        }
+        let result = if wanted {
+            app.global_shortcut().register(escape())
+        } else {
+            app.global_shortcut().unregister(escape())
+        };
+        match result {
+            Ok(()) => *held = wanted,
+            // The Esc monitor in install_dismissal still closes the panel; the press just
+            // reaches the app underneath too, as it always used to.
+            Err(e) => eprintln!("[redpen] could not {} Esc: {e}", if wanted { "grab" } else { "release" }),
         }
     });
 }
@@ -415,9 +467,10 @@ pub fn wait_until_not_frontmost(budget: std::time::Duration) {
 /// system level is the only option left, which is exactly why the spec flags this as the
 /// subtle step of the epic.
 ///
-/// A *global* monitor observes without consuming: Esc still reaches the source app, and it
-/// also dismisses the panel. That is the behaviour we want — swallowing Esc system-wide
-/// while the panel is up would break vim, dialogs and everything else.
+/// A *global* monitor observes without consuming, so on its own Esc would both dismiss the
+/// panel and reach the source app. That is why `show` also grabs Esc as a hotkey (see
+/// `want_escape`): the grab takes the press first, and this monitor only fires if the grab
+/// failed.
 pub fn install_dismissal<F>(app: &AppHandle, on_dismiss: F)
 where
     F: Fn() + Clone + 'static,

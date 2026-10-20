@@ -52,7 +52,7 @@ gives you a button that opens the right settings pane.
 | | |
 |---|---|
 | <kbd>⌥⌘E</kbd> | critique whatever is selected |
-| <kbd>Esc</kbd> | dismiss the card and abort the request |
+| <kbd>Esc</kbd> | dismiss the card and abort the request — that press doesn't reach the app you're in |
 
 The card never takes keyboard focus, so your cursor stays exactly where it was — you can
 read the note and keep typing in the app you were already in.
