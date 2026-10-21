@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshot.png" width="536" alt="Redpen's card: two notes, one missing article and one preposition calque, each with the fix hanging off an elbow">
+  <img src="docs/screenshot.png" width="536" alt="Redpen's card: two notes, one missing article and one preposition calque, each fix written in green above the line">
 </p>
 
 Select text anywhere, press <kbd>⌥⌘E</kbd>, and a small card tells you what sounds off and
