@@ -348,7 +348,7 @@ Applies to both triggers, the critique (⌥⌘E) and the translation (⌘C ⌘C)
 | Safari | page text / textarea | ✅ both (page via text markers) | ✅ | — | 0–9 ms | selection |
 | Chrome | page text / textarea | ✅ both (page via text markers) | ✅ | **yes**: no focused element at all until the switch, then ~1–2 s to build the tree | 0 ms | selection, with the switch |
 | Slack | message box | ❌ zero rect | ✅ the message box, 1119×35 | **yes**, same as Chrome | 0 ms | field |
-| Telegram | message box / message | | | | | |
+| Telegram | (first try, place unrecorded) | ❌ none | ❌ no focused element; a 49-node tree walk found nothing focused | not Electron | 10 ms | mouse (run by Roman) |
 | VS Code | editor | ❌ zero rect | ⚠️ a 0-wide, 18 pt hidden input that Monaco keeps **at the caret** | **yes**, then ~2 s | 0–13 ms | caret, via the field frame |
 | PhpStorm | editor | | | | | |
 | Ghostty | terminal text | ❌ none | ⚠️ the whole terminal area, 1078×713 — no use as an anchor | switches unsupported | 0 ms | mouse (run by Roman) |
