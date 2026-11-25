@@ -19,7 +19,7 @@
 
 ### Current focus
 
-**Next: Epic F — F2.3 (manual tests, README), then the F2 guardrails.** The MVP validation items
+**Next: Epic F — only the dogfood week is left (Roman).** The MVP validation items
 below still need Roman and don't block it.
 
 **Now on:** the MVP is code-complete. What remains is **validation, not building.**
@@ -397,7 +397,7 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 |------|-------------|--------|-------|
 | F2.1 | Translate-mode render in `src/main.ts`: translation, then notes, streaming | ✅ | notes set off by a full-width rule like the verdict; a half-streamed `---` is held back; status reads "translating…". Checked in a browser render, light and dark |
 | F2.2 | Mode carried through the events so the critique parser never sees translation output | ✅ | pulled into F1.4: without it the card was blank. `critique-start` carries `"critique"` or `"translation"` |
-| F2.3 | Manual test entries in `docs/manual-tests.md`; README "Using it" row for double ⌘C | 🔲 | |
+| F2.3 | Manual test entries in `docs/manual-tests.md`; README "Using it" row for double ⌘C | ✅ | §6 of manual-tests, scripted by `scripts/translate-guardrails.py`; README row landed with F1.4 |
 
 **Steps (detail):**
 
@@ -409,9 +409,9 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 
 | Guardrail | Criteria (pass/fail) | Status | Actual outcome |
 |-----------|----------------------|--------|----------------|
-| Speed | Double ⌘C → first translated token < 1 s p50, n=10 | 🔲 | |
-| Abort | Esc mid-stream → request aborted, no done event | 🔲 | |
-| Replace | Double ⌘C while a critique streams → critique aborted, translation shown | 🔲 | |
+| Speed | Double ⌘C → first translated token < 1 s p50, n=10 | ✅ | 2026-11-25: p50 758 ms, range 562–1331, measured from the second press (logged as "ms since the press") |
+| Abort | Esc mid-stream → request aborted, no done event | ✅ | 2026-11-25, 1,000-char text, Esc right after the first token |
+| Replace | Double ⌘C while a critique streams → critique aborted, translation shown | ✅ | 2026-11-25: no `critique done`, translation in 662 ms from the press |
 | Dogfood | A week without opening the Google Translate tab; Roman's verdict recorded here | 🔲 | |
 
 ---
@@ -430,7 +430,7 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 | Double ⌘C misfires or interferes with ordinary copy | Low | Med | Passive monitor never consumes ⌘C; suppressed during ⌥⌘E capture; F1 guardrails count false triggers |
 | Ru→en translation becomes a ghostwriter and erodes the critique habit | Med | Med | Separate mode, card stays `user-select: none`; Roman's dogfood verdict (F2) |
 | The fast model tier rejects `effort` or adaptive thinking | Med | Low | Gate per model like `fallbacks` (#24); checked against the live API in F1.3 |
-| Double ⌘C is blind wherever secure input is on (Terminal's Secure Keyboard Entry, password fields) | High for Terminal users | Low | macOS hides keystrokes from global monitors there; no observing API can see them. Documented limitation, same as capture under secure input |
+| Double ⌘C is blind wherever secure input is on (Terminal's Secure Keyboard Entry, password fields). **A running Terminal with Secure Keyboard Entry holds it from the background too, blinding double ⌘C in every app** | High for Terminal users | Med | macOS hides keystrokes from global monitors there; no observing API can see them. Documented limitation, same as capture under secure input |
 
 ---
 

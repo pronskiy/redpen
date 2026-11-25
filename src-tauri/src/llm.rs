@@ -441,6 +441,9 @@ pub struct Request {
     /// The critique ends in a ```json tag block that must never reach the card (C1.2). A
     /// translation has no such block, and a fence in it belongs to the translated text.
     pub strip_tags: bool,
+    /// When the user asked, if earlier than the request. Guardrail F2 measures from the
+    /// second ⌘C, which comes before reading the pasteboard, not from the HTTP call.
+    pub pressed_at: Option<std::time::Instant>,
 }
 
 impl Request {
@@ -452,6 +455,7 @@ impl Request {
             system_prompt: loaded.system_prompt.clone(),
             prompt_source: format!("system_prompt_path = {:?}", loaded.config.system_prompt_path),
             strip_tags: true,
+            pressed_at: None,
         }
     }
 
@@ -468,6 +472,7 @@ impl Request {
                 format!("translate_prompt_path = {path:?}")
             },
             strip_tags: false,
+            pressed_at: None,
         }
     }
 }
@@ -567,7 +572,14 @@ pub async fn run(app: AppHandle, loaded: Loaded, req: Request, text: String) {
                         first_token = Some(elapsed);
                         // Guardrail A2 measures the first *visible* token, which is why
                         // this sits after the splitter rather than before it.
-                        println!("[redpen] first token in {} ms", elapsed.as_millis());
+                        match req.pressed_at {
+                            Some(p) => println!(
+                                "[redpen] first token in {} ms ({} ms since the press)",
+                                elapsed.as_millis(),
+                                p.elapsed().as_millis()
+                            ),
+                            None => println!("[redpen] first token in {} ms", elapsed.as_millis()),
+                        }
                     }
                     chars += visible.chars().count();
                     let _ = app.emit(EVENT_DELTA, visible);

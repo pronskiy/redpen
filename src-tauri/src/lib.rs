@@ -323,6 +323,7 @@ pub fn run() {
             let translate_app = app.handle().clone();
             doublecopy::install(move |baseline| {
                 let app = translate_app.clone();
+                let pressed_at = std::time::Instant::now();
                 std::thread::spawn(move || {
                     let ms = std::time::Duration::from_millis;
                     let Some(text) =
@@ -336,7 +337,7 @@ pub fn run() {
                     panel::show(&app);
                     let _ = app.emit(llm::EVENT_START, "translation");
                     let loaded = app.state::<ConfigStore>().current();
-                    let request = llm::Request::translation(&loaded);
+                    let request = llm::Request { pressed_at: Some(pressed_at), ..llm::Request::translation(&loaded) };
                     let handle = tauri::async_runtime::spawn(llm::run(app.clone(), loaded, request, text));
                     // Replaces, and aborts, whatever the card was doing.
                     app.state::<InFlight>().set(handle);

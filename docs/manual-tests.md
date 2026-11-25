@@ -121,6 +121,43 @@ update, re-run §1 (capture matrix) and §4 (permission behaviour) before trusti
 | Accessibility grant survives the update | 🔲 | **the acceptance test.** Fails on any unsigned build, by design |
 | ⌥⌘E still captures after the update | 🔲 | if this fails, the grant was revoked |
 
+## 6. Translate on double ⌘C — Epic F guardrails
+
+Scripted: `scripts/translate-guardrails.py` drives TextEdit, Safari, VS Code, Slack and
+Terminal with System Events and reads the dev log. It needs Accessibility for whatever runs
+it, and never presses Return, so the Slack draft it pastes is never sent.
+
+```sh
+npm run tauri dev > /tmp/redpen-dev.log 2>&1 &
+scripts/translate-guardrails.py /tmp/redpen-dev.log         # F1: triggers across apps
+scripts/translate-guardrails.py /tmp/redpen-dev.log --f2    # F2: speed, abort, replace
+```
+
+**Before running, make sure nothing holds secure input** — Terminal with Secure Keyboard
+Entry on does, even from the background, and then the monitor sees no keys at all:
+
+```sh
+ioreg -l -w 0 | grep -o '"kCGSSessionSecureInputPID"=[0-9]*'   # empty is good
+```
+
+Focus is the script's weak spot. A miss whose log line shows a translated URL (Safari's
+address bar got the ⌘A) or "no text was copied" (an empty VS Code editor) is the script's
+fault; rerun or check that app by hand.
+
+Date run: **2026-11-25** · Run by: **Claude**, scripted
+
+| Check | Result | Notes |
+|---|---|---|
+| 50 single ⌘C → no translation | ✅ | 0 from 150 over 3 runs |
+| Double ⌘C triggers: TextEdit, Safari, VS Code, Slack | ✅ | each passed; misses traced to script focus |
+| Double ⌘C with the Russian layout | ✅ | TextEdit, Safari; the keycode is layout-independent (decision #27) |
+| Double ⌘C in Terminal | ❌ accepted | Secure Keyboard Entry on; decision #45 |
+| 10 × ⌥⌘E → no translation | ✅ | 30/30 critiques, 0 translations; the capture retry never fired |
+| ⌘C / ⌘V still work | ✅ | round-tripped in every app |
+| Speed: second ⌘C → first token | ✅ | p50 758 ms, n=10 (562–1331) |
+| Esc mid-stream | ✅ | request aborted, no `translation done` |
+| Double ⌘C over a streaming critique | ✅ | critique aborted, translation shown |
+
 ## Outcome
 
 Fill this in before advancing to Phase A2, and copy the verdict into the

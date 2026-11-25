@@ -2,13 +2,16 @@
 """Epic F guardrails (SPEC F1), driven with System Events against the real apps.
 
     npm run tauri dev > /tmp/redpen-dev.log 2>&1 &
-    scripts/translate-guardrails.py /tmp/redpen-dev.log
+    scripts/translate-guardrails.py /tmp/redpen-dev.log         # F1: triggers, across apps
+    scripts/translate-guardrails.py /tmp/redpen-dev.log --f2    # F2: speed, abort, replace
 
 Needs Accessibility for whatever runs it, and Safari, Terminal, VS Code, Slack and TextEdit.
 Never presses Return anywhere, so nothing pasted into Slack can be sent; the draft is cleared.
 
 Terminal is expected to fail while Secure Keyboard Entry is on: macOS then hides every
 keystroke from other apps, redpen's monitor included, and blocks this script's own keys too.
+Worse, a running Terminal can keep secure input on from the background and blind the monitor
+everywhere, so the script quits Terminal at the end if it was not running before.
 
 Best effort. Focus is the weak spot: if ⌘A lands in Safari's address bar or an empty VS Code
 editor, a check fails on the script's fault, not redpen's — the log line it prints says which
@@ -112,6 +115,67 @@ def check_paste(label, expect):
     record(f"⌘V pastes · {label}", expect in r, "" if expect in r else repr(r[:80]))
 
 
+def f2():
+    """Speed, abort and replace, all in one TextEdit document."""
+    import re, statistics
+    texts = [l.strip() for f in sorted(os.listdir(os.path.join(HERE, "..", "docs", "translate-fixtures")))
+             if f.endswith(".txt") for l in [open(os.path.join(HERE, "..", "docs", "translate-fixtures", f)).read()]]
+    osa('tell application "TextEdit" to activate\ntell application "TextEdit" to make new document with properties {text:""}')
+    time.sleep(1)
+
+    def put(text):
+        osa('tell application "TextEdit" to set text of front document to ' + '"' + text.replace('"', '\\"') + '"')
+        activate("TextEdit"); cmd_a()
+
+    # Speed: press → first visible token, n=10.
+    ms = []
+    for t in texts[:10]:
+        put(t)
+        n = len(lines())
+        double_c()
+        wait_for(n, "translation done", 10)
+        for l in since(n):
+            m = re.search(r"\((\d+) ms since the press\)", l)
+            if m: ms.append(int(m.group(1)))
+        esc(); time.sleep(0.6)
+    p50 = statistics.median(ms) if ms else None
+    record("speed: press → first token p50 < 1000 ms", bool(ms) and len(ms) == 10 and p50 < 1000,
+           f"n={len(ms)} p50={p50} ms min={min(ms, default=None)} max={max(ms, default=None)} all={ms}")
+
+    # Abort: Esc while the translation is streaming.
+    long = " ".join(["The quarterly review slipped because the vendor kept moving the goalposts, "
+                     "and every time we thought we had nailed it down, legal came back with another round of edits."] * 6)
+    put(long)
+    n = len(lines())
+    double_c()
+    wait_for(n, "first token", 10)
+    time.sleep(0.2); esc(); time.sleep(4)
+    after = since(n)
+    aborted = any("request aborted" in l for l in after)
+    finished = any("translation done" in l for l in after)
+    record("abort: Esc mid-stream stops the request", aborted and not finished, " | ".join(after)[-240:])
+
+    # Replace: a double ⌘C while a critique streams.
+    put("I have a possibility to join tomorrow, but I am not sure that I will be able to make a presentation.")
+    n = len(lines())
+    key(14, "option down, command down")
+    wait_for(n, "first token", 12)
+    activate("TextEdit"); cmd_a(); double_c()
+    wait_for(n, "translation done", 12); time.sleep(1)
+    after = since(n)
+    crit_done = any("critique done" in l for l in after)
+    trans_done = any("translation done" in l for l in after)
+    record("replace: double ⌘C over a streaming critique", trans_done and not crit_done, " | ".join(after)[-240:])
+    esc(); time.sleep(0.5)
+    osa('tell application "TextEdit" to close front document saving no')
+    print(f"\n{sum(ok for _, ok, _ in results)}/{len(results)} checks passed")
+
+
+if "--f2" in sys.argv:
+    f2()
+    sys.exit(0)
+
+terminal_was_running = subprocess.run(["pgrep", "-x", "Terminal"], capture_output=True).returncode == 0
 original_layout = subprocess.run([INPUTSOURCE], capture_output=True, text=True).stdout.strip()
 subprocess.run([INPUTSOURCE, "com.apple.keylayout.US"], capture_output=True)
 
@@ -205,6 +269,8 @@ check_paste("from Terminal", "городить огород")
 activate("Safari"); key(13, "command down")             # ⌘W the test tab
 activate("Visual Studio Code"); key(13, "command down")   # the now-empty untitled closes without a prompt
 osa('tell application "Terminal" to close front window')
+if not terminal_was_running:
+    osa('tell application "Terminal" to quit')
 osa('tell application "TextEdit" to close front document saving no')
 if original_layout:
     subprocess.run([INPUTSOURCE, original_layout], capture_output=True)
