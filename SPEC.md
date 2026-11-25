@@ -19,7 +19,7 @@
 
 ### Current focus
 
-**Next build: Epic F — translate on double ⌘C, starting at F1.1.** The MVP validation items
+**Next build: Epic F — translate on double ⌘C, F1.2 (key monitor).** The MVP validation items
 below still need Roman and don't block it.
 
 **Now on:** the MVP is code-complete. What remains is **validation, not building.**
@@ -347,7 +347,7 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 
 | Step | Description | Status | Notes |
 |------|-------------|--------|-------|
-| F1.1 | `doublecopy.rs`: pure double-press detector, injected clock, unit tests | 🔲 | |
+| F1.1 | `doublecopy.rs`: pure double-press detector, injected clock, unit tests | ✅ | 14 tests; triple press fires once, suppression forgets the pending press |
 | F1.2 | Passive global key monitor → detector → read the pasteboard after the second press | 🔲 | |
 | F1.3 | `llm.rs` takes prompt, model and effort as parameters; critique path unchanged | 🔲 | |
 | F1.4 | `prompts/translate.md` bundled via `include_str!`; `translate_*` config fields | 🔲 | |

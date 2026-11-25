@@ -1,6 +1,8 @@
 mod accessibility;
 mod capture;
 mod config;
+#[allow(dead_code)] // wired to the key monitor in F1.2
+mod doublecopy;
 mod llm;
 mod panel;
 mod update;
