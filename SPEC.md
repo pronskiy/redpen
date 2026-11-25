@@ -384,10 +384,10 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 
 | Guardrail | Criteria (pass/fail) | Status | Actual outcome |
 |-----------|----------------------|--------|----------------|
-| No false triggers | 50 ordinary single ⌘C across Slack, Safari, VS Code and Terminal → 0 translations | 🔲 | |
-| Triggers everywhere | Double ⌘C triggers in each of those 4 apps, including with the Russian layout active | 🔲 | |
-| ⌥⌘E is not a trigger | 10 critiques, at least one that needed the capture retry → 0 translations | 🔲 | |
-| ⌘C intact | Copy and paste behave normally in every app while redpen runs | 🔲 | |
+| No false triggers | 50 ordinary single ⌘C across Slack, Safari, VS Code and Terminal → 0 translations | ✅ | 2026-11-25, `scripts/translate-guardrails.py`: 0 translations from 150 single ⌘C over 3 runs |
+| Triggers everywhere | Double ⌘C triggers in each of those 4 apps, including with the Russian layout active | 🔄 | TextEdit, Safari, VS Code and Slack each triggered (the misses were the script selecting the URL bar or an empty editor); Russian layout passes in TextEdit and Safari. **Terminal: never**, because Roman's Terminal has Secure Keyboard Entry on, which hides keystrokes from every other app. Needs Roman's call |
+| ⌥⌘E is not a trigger | 10 critiques, at least one that needed the capture retry → 0 translations | ✅ | 30 critiques over 3 runs → 0 translations. The retry never happened, so that case rests on the unit tests |
+| ⌘C intact | Copy and paste behave normally in every app while redpen runs | ✅ | copy and paste round-tripped in TextEdit, Safari, VS Code and Slack whenever the script had focus |
 | Direction | Fixtures: every English one → Russian, every Russian and Dutch one → English, 12/12 | ✅ | 2026-11-25, Sonnet 5 / `low`: 12/12 in each of 3 runs. For contrast Haiku 5.5 / `low` went wrong 3 times in 4 runs (Dutch and Russian kept out of English), backing #44 |
 | Notes earn their place | Plain fixtures get no notes; each idiomatic one gets a note on its idiom | ✅ | Sonnet: 3/3 runs clean, every note in Russian, read by eye once. Haiku put a note on a plain text once |
 
@@ -430,6 +430,7 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 | Double ⌘C misfires or interferes with ordinary copy | Low | Med | Passive monitor never consumes ⌘C; suppressed during ⌥⌘E capture; F1 guardrails count false triggers |
 | Ru→en translation becomes a ghostwriter and erodes the critique habit | Med | Med | Separate mode, card stays `user-select: none`; Roman's dogfood verdict (F2) |
 | The fast model tier rejects `effort` or adaptive thinking | Med | Low | Gate per model like `fallbacks` (#24); checked against the live API in F1.3 |
+| Double ⌘C is blind wherever secure input is on (Terminal's Secure Keyboard Entry, password fields) | High for Terminal users | Low | macOS hides keystrokes from global monitors there; no observing API can see them. Documented limitation, same as capture under secure input |
 
 ---
 
