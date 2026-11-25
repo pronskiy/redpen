@@ -50,6 +50,17 @@
   // copy is the only copy, and there is nothing to drift.
   "system_prompt_path": "/Users/you/projects/redpen/prompts/critique.md",
 
+  // Translation: select text, press ⌘C twice quickly. English goes into Russian, every
+  // other language into English, with notes on idioms where a literal reading misleads.
+  // Same model as the critique, but at low effort: it has to beat a browser tab. Haiku was
+  // tried and confused the direction (Dutch into Russian) and calqued idioms.
+  "translate_model": "claude-sonnet-5",
+  "translate_effort": "low",
+
+  // Empty uses the prompt compiled into the app. Point it at a Markdown file to use your own;
+  // it hot-reloads like the critique prompt.
+  "translate_prompt_path": "",
+
   // Where "Check for Updates…" looks. Empty switches update checks off.
   "update_endpoint": "https://github.com/pronskiy/redpen/releases/latest/download/latest.json"
 }

@@ -319,11 +319,26 @@ mod tests {
                 ..Default::default()
             },
             system_prompt: "PROMPT".into(),
+            translate_prompt: "TRANSLATE".into(),
         };
         let r = Request::critique(&loaded);
         assert_eq!((r.model.as_str(), r.effort.as_str(), r.system_prompt.as_str()), ("claude-sonnet-5", "medium", "PROMPT"));
         assert!(r.strip_tags, "the critique's tag block must still be stripped");
         assert!(r.prompt_source.contains("/p/critique.md"));
+    }
+
+    #[test]
+    fn the_translation_request_uses_its_own_model_and_keeps_every_fence() {
+        let loaded = crate::config::Loaded {
+            config: crate::config::Config::default(),
+            system_prompt: "CRITIQUE".into(),
+            translate_prompt: "TRANSLATE".into(),
+        };
+        let r = Request::translation(&loaded);
+        assert_eq!((r.model.as_str(), r.effort.as_str()), ("claude-sonnet-5", "low"));
+        assert_eq!(r.system_prompt, "TRANSLATE", "never the critique prompt");
+        assert!(!r.strip_tags, "a ```json fence in translated text is the text's own");
+        assert!(r.prompt_source.contains("bundled"));
     }
 
     #[test]
@@ -439,6 +454,22 @@ impl Request {
             strip_tags: true,
         }
     }
+
+    pub fn translation(loaded: &Loaded) -> Self {
+        let path = &loaded.config.translate_prompt_path;
+        Self {
+            kind: "translation",
+            model: loaded.config.translate_model.clone(),
+            effort: loaded.config.translate_effort.clone(),
+            system_prompt: loaded.translate_prompt.clone(),
+            prompt_source: if path.is_empty() {
+                "the bundled prompts/translate.md".into()
+            } else {
+                format!("translate_prompt_path = {path:?}")
+            },
+            strip_tags: false,
+        }
+    }
 }
 
 pub async fn run(app: AppHandle, loaded: Loaded, req: Request, text: String) {
@@ -476,7 +507,8 @@ pub async fn run(app: AppHandle, loaded: Loaded, req: Request, text: String) {
         http = http.header("anthropic-beta", "server-side-fallback-2026-07-01");
     }
 
-    let _ = app.emit(EVENT_START, ());
+    // The payload tells the card which renderer to use (F2.2).
+    let _ = app.emit(EVENT_START, req.kind);
     let started = std::time::Instant::now();
 
     let resp = match http.json(&body).send().await {

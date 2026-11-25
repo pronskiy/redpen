@@ -168,7 +168,7 @@ pub fn run() {
                         let shows_before = panel::shows_so_far();
                         panel::position_at_mouse(&app);
                         panel::show(&app);
-                        let _ = app.emit(llm::EVENT_START, ());
+                        let _ = app.emit(llm::EVENT_START, "critique");
 
                         std::thread::spawn(move || {
                             // Let the show land first. Its *first* run activates the app, so
@@ -261,6 +261,18 @@ pub fn run() {
                 {
                     let _ = handle.emit("ui-settings", UiSettings::of(&new.config));
                 }
+                if old.config.translate_model != new.config.translate_model
+                    || old.config.translate_effort != new.config.translate_effort
+                {
+                    println!(
+                        "[redpen] translation: {}/{} -> {}/{}",
+                        old.config.translate_model, old.config.translate_effort,
+                        new.config.translate_model, new.config.translate_effort
+                    );
+                }
+                if old.translate_prompt != new.translate_prompt {
+                    println!("[redpen] translate prompt reloaded ({} chars)", new.translate_prompt.chars().count());
+                }
                 if old.config.api_key != new.config.api_key {
                     println!("[redpen] api key updated");   // never print the key itself
                 }
@@ -306,14 +318,28 @@ pub fn run() {
                     println!("[redpen] dismissed — request aborted");
                 }
             });
-            // F1.2: double ⌘C. Only logs for now; F1.4 puts the translation on the card.
-            doublecopy::install(|baseline| {
+            // Epic F: double ⌘C translates. The card shows only once there is text: unlike
+            // ⌥⌘E, a double ⌘C on nothing is likely an accident and gets no card at all.
+            let translate_app = app.handle().clone();
+            doublecopy::install(move |baseline| {
+                let app = translate_app.clone();
                 std::thread::spawn(move || {
                     let ms = std::time::Duration::from_millis;
-                    match doublecopy::copied_text(&capture::MacClipboard, baseline, ms(300), ms(5), ms(20)) {
-                        Some(text) => println!("[redpen] double ⌘C: {} chars{}", text.chars().count(), preview(&text)),
-                        None => println!("[redpen] double ⌘C, but no text was copied"),
-                    }
+                    let Some(text) =
+                        doublecopy::copied_text(&capture::MacClipboard, baseline, ms(300), ms(5), ms(20))
+                    else {
+                        println!("[redpen] double ⌘C, but no text was copied");
+                        return;
+                    };
+                    println!("[redpen] double ⌘C: {} chars{}", text.chars().count(), preview(&text));
+                    panel::position_at_mouse(&app);
+                    panel::show(&app);
+                    let _ = app.emit(llm::EVENT_START, "translation");
+                    let loaded = app.state::<ConfigStore>().current();
+                    let request = llm::Request::translation(&loaded);
+                    let handle = tauri::async_runtime::spawn(llm::run(app.clone(), loaded, request, text));
+                    // Replaces, and aborts, whatever the card was doing.
+                    app.state::<InFlight>().set(handle);
                 });
             });
 

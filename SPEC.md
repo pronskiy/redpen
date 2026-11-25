@@ -19,7 +19,7 @@
 
 ### Current focus
 
-**Next build: Epic F — translate on double ⌘C, F1.4 (prompt, config, wire to the card).** The MVP validation items
+**Next build: Epic F — translate on double ⌘C, F1.5 (fixtures), then the F1 guardrails.** The MVP validation items
 below still need Roman and don't block it.
 
 **Now on:** the MVP is code-complete. What remains is **validation, not building.**
@@ -89,7 +89,7 @@ Consequence for priorities: the panel (Epics B–C) carries no defensible value 
 | Response contract | Markdown critique + trailing ```json block with error tags | Journal (Epic E) needs structured tags from day one even though the journal ships later. Tags at the *end* so the user reads prose, not streaming JSON |
 | Core principle | **Never insert, replace, or paste anything** | The entire thesis. No paste-back code path exists in this codebase |
 | Translation trigger | Double ⌘C (≤ ~400 ms), seen by a passive global NSEvent key monitor; the pasteboard is read, not written | Never consumes ⌘C and needs no permission beyond Accessibility. The target app has already copied, so no synthetic ⌘C and no restore. Decision #38 |
-| Translation model | `translate_model` (default `claude-haiku-5-5`), `translate_effort` `low`, prompt compiled in | Must beat a browser tab on speed; the critique's model and prompt are untouched. Decisions #42, #43 |
+| Translation model | `translate_model` (default `claude-sonnet-5`), `translate_effort` `low`, prompt compiled in | Must beat a browser tab on speed; low effort is the lever, not a smaller model. Decisions #43, #44 |
 | Caret positioning | Deferred to Epic D via a Swift shim (`swift-rs`) | Raw AX C API from Rust is ~120 lines of unsafe FFI; a `@_cdecl` Swift function is 15 lines. Panel positions at the mouse cursor until then |
 | Model | `claude-sonnet-5`, adaptive thinking, `output_config.effort: "medium"` | Decision #25 (supersedes #15). Effort — not model tier — is the latency lever; thinking is on by default and renders as a blank card until it finishes (decision #16). This tier does not accept `fallbacks` (decision #24) |
 | Tag vocabulary | Fixed 20-tag list, embedded in the prompt itself | Epic E cannot aggregate freeform tags. The harness extracts the list from the prompt and validates every response against it, so there is one source of truth |
@@ -350,7 +350,7 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 | F1.1 | `doublecopy.rs`: pure double-press detector, injected clock, unit tests | ✅ | 14 tests; triple press fires once, suppression forgets the pending press |
 | F1.2 | Passive global key monitor → detector → read the pasteboard after the second press | ✅ | 5 tests for the read; logs only. Checked 2026-11-25 in TextEdit via System Events: double fires, single doesn't, nothing selected stays silent, ⌥⌘E doesn't trigger |
 | F1.3 | `llm.rs` takes prompt, model and effort as parameters; critique path unchanged | ✅ | `llm::Request`; translation skips the tag splitter entirely. Haiku 5.5 verified live: adaptive thinking + effort `low` accepted, 0.6 s. Critique re-checked end to end |
-| F1.4 | `prompts/translate.md` bundled via `include_str!`; `translate_*` config fields | 🔲 | |
+| F1.4 | `prompts/translate.md` bundled via `include_str!`; `translate_*` config fields | ✅ | wired to the card; live in the app: first token 645–852 ms. Default model switched to Sonnet 5 / `low` after sampling (#44). Known miss: a prompt-injection line gets a note about the task itself |
 | F1.5 | Translate fixtures (en / ru / nl) run through the harness | 🔲 | |
 
 **Steps (detail):**
@@ -370,7 +370,7 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
   ```
 - **F1.2 — Monitor.** Deliverable: `NSEvent::addGlobalMonitorForEventsMatchingMask_handler(KeyDown)` installed at setup next to `panel::install_dismissal`. It is the same mechanism as decision #30: it observes and never consumes, so ⌘C keeps working everywhere, and it needs nothing beyond the Accessibility grant redpen already has. The keycode is `kVK_ANSI_C` (0x08), never a character, so a Russian layout still matches (decision #27). Record the pasteboard `changeCount` at the first press. On a fire, off the main thread, wait ≤ ~300 ms for it to move past that baseline, then read the text; no change, not text, or whitespace means stay silent. **The detector is suppressed while a ⌥⌘E capture runs:** capture sends synthetic ⌘C on the same keycode, up to twice, and a global monitor cannot tell those from the user's. Suppression outlasts the capture by 250 ms, because the monitor receives key events asynchronously. F1.2 stops at logging the captured text; putting it on the card is F1.4.
 - **F1.3 — LLM parameters.** Deliverable: `build_body` / `run` take the system prompt, model and effort from the caller instead of reading the critique's fields; the critique passes exactly what it does today, and the existing parser tests pass untouched. Thinking stays adaptive for both modes (decision #16). Translation output has no trailing ```json block, and the tag splitter passes it through unchanged; a test proves that. **Verify against the live API** that the translate model accepts `output_config.effort` and adaptive thinking; if a tier rejects either, gate it per model the way `fallbacks` is (decision #24).
-- **F1.4 — Prompt and config.** Deliverable: `prompts/translate.md`, compiled in with `include_str!` so translation works with zero setup. `translate_prompt_path`, if set, overrides it and hot-reloads like the critique prompt. New optional config fields: `translate_model` (default `claude-haiku-5-5`), `translate_effort` (default `low`), `translate_prompt_path` (default empty → bundled). Documented in `config.example.jsonc` and the README table. This step also wires the trigger to the card: show the panel at the mouse, emit the start event in translate mode, spawn `llm::run` with the translate parameters, and hand the handle to `InFlight` (which aborts any previous request). Output contract:
+- **F1.4 — Prompt and config.** Deliverable: `prompts/translate.md`, compiled in with `include_str!` so translation works with zero setup. `translate_prompt_path`, if set, overrides it and hot-reloads like the critique prompt. New optional config fields: `translate_model` (default `claude-sonnet-5`, see #44), `translate_effort` (default `low`), `translate_prompt_path` (default empty → bundled). Documented in `config.example.jsonc` and the README table. This step also wires the trigger to the card: show the panel at the mouse, emit the start event in translate mode, spawn `llm::run` with the translate parameters, and hand the handle to `InFlight` (which aborts any previous request). Output contract:
   ```
   <translation>
 
@@ -395,8 +395,8 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 
 | Step | Description | Status | Notes |
 |------|-------------|--------|-------|
-| F2.1 | Translate-mode render in `src/main.ts`: translation, then notes, streaming | 🔲 | |
-| F2.2 | Mode carried through the events so the critique parser never sees translation output | 🔲 | |
+| F2.1 | Translate-mode render in `src/main.ts`: translation, then notes, streaming | 🔄 | a minimal render landed with F1.4; the real design is still to do |
+| F2.2 | Mode carried through the events so the critique parser never sees translation output | ✅ | pulled into F1.4: without it the card was blank. `critique-start` carries `"critique"` or `"translation"` |
 | F2.3 | Manual test entries in `docs/manual-tests.md`; README "Using it" row for double ⌘C | 🔲 | |
 
 **Steps (detail):**
@@ -480,6 +480,7 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 | 41 | 2026-11-25 | Translation comes with notes, not bare | Roman chose translation + notes over a bare Google-Translate-style result. Notes appear only where a literal reading misleads (idioms, false friends); plain text gets none | Roman |
 | 42 | 2026-11-25 | Notes are in Russian; translation defaults to `claude-haiku-5-5` at effort `low` | Russian because it is Roman's L1 whichever way the text goes. A fast model because translation has to beat a browser tab, and separate `translate_model`/`translate_effort` keep the critique on Sonnet 5 at medium (#25). Thinking is not disabled (#16). Proposed by Claude, open to Roman's review | Claude |
 | 43 | 2026-11-25 | The translate prompt is compiled in, with an optional `translate_prompt_path` override | The critique prompt is referenced by path (#23) because it is tuned daily; the translate prompt isn't, and translation should work with zero setup | Claude |
+| 44 | 2026-11-25 | Translation defaults to `claude-sonnet-5` at effort `low`, not Haiku — reverses the model half of #42 | Sampled live on the same texts. Haiku 5.5 at `low` sent Dutch into Russian, echoed a Russian source and corrected itself mid-answer, left an English sentence untranslated, and calqued idioms; at `medium` it still read "on second thought" as "во-вторых". Sonnet 5 at `low` got every sample right ("ik heb er een hard hoofd in" → "I have my doubts", "table this" → отложить) with the first token in 0.5–1.1 s. Effort, not tier, stays the latency lever, as #16 says for the critique | Claude |
 
 ---
 

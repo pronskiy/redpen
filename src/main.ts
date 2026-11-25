@@ -9,6 +9,8 @@ let buffer = "";
 let streamDone = false;
 /** Whether the card is showing a critique, so a live style change knows it may redraw. */
 let showingCritique = false;
+/** Set by every `critique-start`; picks the renderer, so translation output never meets the critique parser. */
+let mode: "critique" | "translation" = "critique";
 
 type CorrectionStyle = "pen" | "inline" | "tinted";
 let style: CorrectionStyle = "pen";
@@ -244,7 +246,24 @@ function renderNote(note: Note): string {
     </li>`;
 }
 
+/**
+ * The translate prompt's shape: the translation, then optionally a `---` line and notes,
+ * each `- **<phrase>** — <note>`. Minimal for now; F2.1 gives it its own design.
+ */
+function renderTranslation(md: string): string {
+  const [body, ...rest] = md.split(/^---\s*$/m);
+  const paras = body.trim().split(/\n{2,}/).map((p) => `<p class="translation">${esc(p)}</p>`).join("");
+  const notes = rest.join("---").split("\n").map((l) => l.match(/^\s*-\s*\*\*(.+?)\*\*\s*[—–-]\s*(.*)$/)).filter(Boolean)
+    .map((m) => `<li class="tnote"><b>${esc(m![1])}</b> — ${esc(m![2])}</li>`).join("");
+  return paras + (notes ? `<ul class="tnotes">${notes}</ul>` : "");
+}
+
 function render() {
+  if (mode === "translation") {
+    out.innerHTML = renderTranslation(buffer);
+    out.scrollTop = out.scrollHeight;
+    return;
+  }
   const { verdict, notes } = parse(buffer, streamDone);
   // An <ol> even for a single note: render() re-runs on every stream delta, so a list that
   // only appeared once the second note landed would shove the first one sideways mid-stream.
@@ -274,10 +293,11 @@ function applySettings(s: UiSettings) {
 invoke<UiSettings>("ui_settings").then(applySettings).catch(() => {});
 listen<UiSettings>("ui-settings", (e) => applySettings(e.payload));
 
-listen("critique-start", () => {
+listen<string>("critique-start", (e) => {
+  mode = e.payload === "translation" ? "translation" : "critique";
   buffer = "";
   streamDone = false;
-  showingCritique = true;
+  showingCritique = mode === "critique";
   out.innerHTML = "";
   setStatus("reading…");
 });

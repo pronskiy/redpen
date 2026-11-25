@@ -29,6 +29,15 @@ fn default_font_size() -> u8 { 15 }
 /// than an enum so a typo degrades to the default in the card instead of failing the whole
 /// parse and costing every other setting.
 fn default_correction_style() -> String { "pen".into() }
+/// Sonnet 5 at effort `low`, not Haiku: Haiku at `low` sent Dutch into Russian and calqued
+/// idioms, and at `medium` still mistranslated "on second thought". Sonnet at `low` got every
+/// sample right with the first token in 0.5–1.1 s (decision #44, reverses part of #42).
+fn default_translate_model() -> String { "claude-sonnet-5".into() }
+fn default_translate_effort() -> String { "low".into() }
+
+/// Compiled in, so translation works with zero setup (decision #43). `translate_prompt_path`
+/// overrides it.
+pub const BUNDLED_TRANSLATE_PROMPT: &str = include_str!("../../prompts/translate.md");
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
@@ -51,6 +60,13 @@ pub struct Config {
     pub system_prompt_path: String,
     #[serde(default = "default_update_endpoint")]
     pub update_endpoint: String,
+    #[serde(default = "default_translate_model")]
+    pub translate_model: String,
+    #[serde(default = "default_translate_effort")]
+    pub translate_effort: String,
+    /// Empty means the bundled prompt.
+    #[serde(default)]
+    pub translate_prompt_path: String,
 }
 
 impl Default for Config {
@@ -65,6 +81,9 @@ impl Default for Config {
             correction_style: default_correction_style(),
             system_prompt_path: String::new(),
             update_endpoint: default_update_endpoint(),
+            translate_model: default_translate_model(),
+            translate_effort: default_translate_effort(),
+            translate_prompt_path: String::new(),
         }
     }
 }
@@ -115,6 +134,8 @@ impl Config {
 pub struct Loaded {
     pub config: Config,
     pub system_prompt: String,
+    /// Never empty: an unreadable override falls back to the bundled prompt.
+    pub translate_prompt: String,
 }
 
 impl Loaded {
@@ -128,7 +149,19 @@ impl Loaded {
                 String::new()
             })
         };
-        Self { config, system_prompt }
+        let translate_prompt = if config.translate_prompt_path.is_empty() {
+            BUNDLED_TRANSLATE_PROMPT.to_string()
+        } else {
+            std::fs::read_to_string(&config.translate_prompt_path).unwrap_or_else(|e| {
+                // Unlike the critique, which has no prompt of its own to fall back to.
+                eprintln!(
+                    "[redpen] cannot read translate prompt {}: {e}; using the bundled one",
+                    config.translate_prompt_path
+                );
+                BUNDLED_TRANSLATE_PROMPT.to_string()
+            })
+        };
+        Self { config, system_prompt, translate_prompt }
     }
 }
 
@@ -170,8 +203,11 @@ impl ConfigStore {
         if let Some(d) = self.path.parent() {
             dirs.push(d.to_path_buf());
         }
-        let prompt = self.current().config.system_prompt_path;
-        if !prompt.is_empty() {
+        let config = self.current().config;
+        for prompt in [config.system_prompt_path, config.translate_prompt_path] {
+            if prompt.is_empty() {
+                continue;
+            }
             if let Some(d) = Path::new(&prompt).parent() {
                 if d.exists() && !dirs.contains(&d.to_path_buf()) {
                     dirs.push(d.to_path_buf());
@@ -234,6 +270,50 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
+    }
+
+    #[test]
+    fn translation_works_with_no_setup() {
+        let d = tmp("translate-default");
+        let p = d.join("config.json");
+        std::fs::write(&p, r#"{"api_key":"sk-test"}"#).unwrap();
+        let l = Loaded::load_from(&p);
+        assert_eq!(l.config.translate_model, "claude-sonnet-5");
+        assert_eq!(l.config.translate_effort, "low");
+        assert_eq!(l.translate_prompt, BUNDLED_TRANSLATE_PROMPT);
+        assert!(l.translate_prompt.contains("---"), "the bundled prompt carries the notes contract");
+    }
+
+    #[test]
+    fn translate_prompt_path_overrides_the_bundled_prompt() {
+        let d = tmp("translate-override");
+        let prompt = d.join("mine.md");
+        std::fs::write(&prompt, "MY TRANSLATE PROMPT").unwrap();
+        let p = d.join("config.json");
+        std::fs::write(&p, format!(r#"{{"translate_prompt_path":"{}"}}"#, prompt.display())).unwrap();
+        assert_eq!(Loaded::load_from(&p).translate_prompt, "MY TRANSLATE PROMPT");
+    }
+
+    #[test]
+    fn an_unreadable_translate_prompt_falls_back_to_the_bundled_one() {
+        let d = tmp("translate-missing");
+        let p = d.join("config.json");
+        std::fs::write(&p, r#"{"translate_prompt_path":"/nope/translate.md"}"#).unwrap();
+        assert_eq!(Loaded::load_from(&p).translate_prompt, BUNDLED_TRANSLATE_PROMPT);
+    }
+
+    #[test]
+    fn editing_the_translate_prompt_counts_as_a_change() {
+        let d = tmp("translate-reload");
+        let prompt = d.join("t.md");
+        std::fs::write(&prompt, "v1").unwrap();
+        let p = d.join("config.json");
+        std::fs::write(&p, format!(r#"{{"translate_prompt_path":"{}"}}"#, prompt.display())).unwrap();
+        let store = ConfigStore::new(p);
+        assert!(store.dirs_to_watch().contains(&d), "its directory must be watched");
+        std::fs::write(&prompt, "v2").unwrap();
+        let (_, new) = store.reload().expect("a prompt edit is a change");
+        assert_eq!(new.translate_prompt, "v2");
     }
 
     #[test]

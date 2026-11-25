@@ -52,6 +52,7 @@ gives you a button that opens the right settings pane.
 | | |
 |---|---|
 | <kbd>⌥⌘E</kbd> | critique whatever is selected |
+| <kbd>⌘C</kbd> <kbd>⌘C</kbd> | translate whatever is selected: English into Russian, anything else into English |
 | <kbd>Esc</kbd> | dismiss the card and abort the request — that press doesn't reach the app you're in |
 
 The card never takes keyboard focus, so your cursor stays exactly where it was — you can
@@ -74,6 +75,8 @@ Everything lives in `~/Library/Application Support/redpen/config.json`, and edit
 | `font_size` | Base size for the card, in points — everything scales off it |
 | `correction_style` | How a fix is drawn in your line: `pen` (default) writes it above the struck words, `inline` puts it right after them, `tinted` does the same on a coloured background |
 | `system_prompt_path` | Point this at your own prompt file to change what gets flagged |
+| `translate_model`, `translate_effort` | Model and effort for translation (⌘C ⌘C). Default `claude-sonnet-5` at `low` |
+| `translate_prompt_path` | Your own translation prompt. Empty uses the built-in one |
 | `update_endpoint` | Where update checks look. Empty turns checks off |
 | `base_url` | For an API-compatible proxy |
 

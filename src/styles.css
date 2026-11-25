@@ -240,3 +240,16 @@ button:active { background: var(--control-active); }
   background: var(--rule);
   border-radius: 4px;
 }
+
+/* Translation (Epic F). Minimal until F2.1: the translation reads as the card's main text,
+   the notes sit under a hairline in the same muted size as a critique's Tell. */
+.translation { margin: 0 0 0.6em; white-space: pre-wrap; }
+.tnotes {
+  margin: 0.4em 0 0;
+  padding: 0.6em 0 0 1.1em;
+  border-top: 1px solid var(--separator);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.tnote + .tnote { margin-top: 4px; }
+.tnote b { color: var(--ink); font-weight: 600; }
