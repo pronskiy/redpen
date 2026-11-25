@@ -453,7 +453,11 @@ impl Request {
             model: loaded.config.model.clone(),
             effort: loaded.config.effort.clone(),
             system_prompt: loaded.system_prompt.clone(),
-            prompt_source: format!("system_prompt_path = {:?}", loaded.config.system_prompt_path),
+            prompt_source: if loaded.config.system_prompt_path.is_empty() {
+                "the bundled prompts/critique.md".into()
+            } else {
+                format!("system_prompt_path = {:?}", loaded.config.system_prompt_path)
+            },
             strip_tags: true,
             pressed_at: None,
         }

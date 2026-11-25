@@ -74,7 +74,7 @@ Everything lives in `~/Library/Application Support/redpen/config.json`, and edit
 | `hotkey` | Defaults to `Alt+Cmd+E`; rebinds live |
 | `font_size` | Base size for the card, in points — everything scales off it |
 | `correction_style` | How a fix is drawn in your line: `pen` (default) writes it above the struck words, `inline` puts it right after them, `tinted` does the same on a coloured background |
-| `system_prompt_path` | Point this at your own prompt file to change what gets flagged |
+| `system_prompt_path` | Optional. Your own critique prompt, to change what gets flagged. Empty uses the built-in one |
 | `translate_model`, `translate_effort` | Model and effort for translation (⌘C ⌘C). Default `claude-sonnet-5` at `low` |
 | `translate_prompt_path` | Your own translation prompt. Empty uses the built-in one |
 | `update_endpoint` | Where update checks look. Empty turns checks off |

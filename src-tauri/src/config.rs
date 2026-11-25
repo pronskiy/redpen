@@ -4,7 +4,8 @@
 //! The system prompt is a *path*, not an inline string (decision #23): a 141-line prompt
 //! escaped into JSON would be unreadable, which defeats the whole reason config is a file
 //! you edit in an editor (decision #8). So hot reload watches **two** files — the JSON and
-//! whatever `system_prompt_path` points at.
+//! whatever `system_prompt_path` points at. An empty path uses the prompt compiled into the
+//! app, so a fresh install works without a repo checkout (decision #53).
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -34,6 +35,10 @@ fn default_correction_style() -> String { "pen".into() }
 /// sample right with the first token in 0.5–1.1 s (decision #44, reverses part of #42).
 fn default_translate_model() -> String { "claude-sonnet-5".into() }
 fn default_translate_effort() -> String { "low".into() }
+
+/// Compiled in, so the critique works on a fresh install (decision #53).
+/// `system_prompt_path` overrides it.
+pub const BUNDLED_CRITIQUE_PROMPT: &str = include_str!("../../prompts/critique.md");
 
 /// Compiled in, so translation works with zero setup (decision #43). `translate_prompt_path`
 /// overrides it.
@@ -142,18 +147,20 @@ impl Loaded {
     pub fn load_from(config_path: &Path) -> Self {
         let config = Config::load_from(config_path);
         let system_prompt = if config.system_prompt_path.is_empty() {
-            String::new()
+            BUNDLED_CRITIQUE_PROMPT.to_string()
         } else {
             std::fs::read_to_string(&config.system_prompt_path).unwrap_or_else(|e| {
-                eprintln!("[redpen] cannot read prompt {}: {e}", config.system_prompt_path);
-                String::new()
+                eprintln!(
+                    "[redpen] cannot read prompt {}: {e}; using the bundled one",
+                    config.system_prompt_path
+                );
+                BUNDLED_CRITIQUE_PROMPT.to_string()
             })
         };
         let translate_prompt = if config.translate_prompt_path.is_empty() {
             BUNDLED_TRANSLATE_PROMPT.to_string()
         } else {
             std::fs::read_to_string(&config.translate_prompt_path).unwrap_or_else(|e| {
-                // Unlike the critique, which has no prompt of its own to fall back to.
                 eprintln!(
                     "[redpen] cannot read translate prompt {}: {e}; using the bundled one",
                     config.translate_prompt_path
@@ -270,6 +277,31 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
+    }
+
+    #[test]
+    fn critique_works_with_no_setup() {
+        let d = tmp("critique-default");
+        let p = d.join("config.json");
+        std::fs::write(&p, r#"{"api_key":"sk-test"}"#).unwrap();
+        let l = Loaded::load_from(&p);
+        assert!(l.config.system_prompt_path.is_empty());
+        assert_eq!(l.system_prompt, BUNDLED_CRITIQUE_PROMPT);
+        assert!(!l.system_prompt.trim().is_empty());
+    }
+
+    #[test]
+    fn the_default_config_gets_the_bundled_critique_prompt() {
+        let l = Loaded::load_from(&tmp("critique-missing").join("config.json"));
+        assert_eq!(l.system_prompt, BUNDLED_CRITIQUE_PROMPT);
+    }
+
+    #[test]
+    fn an_unreadable_critique_prompt_falls_back_to_the_bundled_one() {
+        let d = tmp("critique-unreadable");
+        let p = d.join("config.json");
+        std::fs::write(&p, r#"{"system_prompt_path":"/nope/critique.md"}"#).unwrap();
+        assert_eq!(Loaded::load_from(&p).system_prompt, BUNDLED_CRITIQUE_PROMPT);
     }
 
     #[test]

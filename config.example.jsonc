@@ -44,11 +44,11 @@
   // Anything else falls back to "pen".
   "correction_style": "pen",
 
-  // Path to the system prompt, kept as a real Markdown file you edit in a real editor.
-  // A 141-line prompt inlined as an escaped JSON string would be unreadable and
-  // uneditable, so this field holds a path. Point it at your own checkout — then the repo
-  // copy is the only copy, and there is nothing to drift.
-  "system_prompt_path": "/Users/you/projects/redpen/prompts/critique.md",
+  // Optional. Empty uses the critique prompt compiled into the app. To tune it, point this at
+  // a Markdown file — your checkout's prompts/critique.md, so the repo copy stays the only
+  // copy. A path, not an inline string: a 141-line prompt escaped into JSON is unreadable.
+  // Edits to the file hot-reload.
+  "system_prompt_path": "",
 
   // Translation: select text, press ⌘C twice quickly. English goes into Russian, every
   // other language into English, with notes on idioms where a literal reading misleads.
