@@ -351,9 +351,9 @@ Applies to both triggers, the critique (⌥⌘E) and the translation (⌘C ⌘C)
 | Telegram | message box / message | | | | | |
 | VS Code | editor | ❌ zero rect | ⚠️ a 0-wide, 18 pt hidden input that Monaco keeps **at the caret** | **yes**, then ~2 s | 0–13 ms | caret, via the field frame |
 | PhpStorm | editor | | | | | |
-| Ghostty | terminal text | | | | | |
+| Ghostty | terminal text | ❌ none | ⚠️ the whole terminal area, 1078×713 — no use as an anchor | switches unsupported | 0 ms | mouse (run by Roman) |
 
-Findings that shape D2 regardless of the rest: the Electron/Chromium switch (`AXManualAccessibility`) has to be set **ahead of time** (when the app activates), not at the hotkey, because the app needs 1–2 s to build its tree; and Chrome's own `AXEnhancedUserInterface` answered "not implemented" yet the tree appeared anyway. Selecting a *received* message in Slack (reading, not writing) is untested.
+Findings that shape D2 regardless of the rest: the Electron/Chromium switch (`AXManualAccessibility`) has to be set **ahead of time** (when the app activates), not at the hotkey, because the app needs 1–2 s to build its tree; and Chrome's own `AXEnhancedUserInterface` answered "not implemented" yet the tree appeared anyway. Selecting a *received* message in Slack (reading, not writing) is untested. A field frame taller than ~200 pt or close to the window's own size (Ghostty) says nothing about where the text is, so D2 treats it as no answer and keeps the mouse.
 
 **Exit guardrails — Phase D1 → D2**
 
