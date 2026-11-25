@@ -191,9 +191,11 @@ pub fn run() {
                                 Ok(text) => {
                                     println!("[redpen] captured {} chars{}", text.chars().count(), preview(&text));
                                     let loaded = app.state::<ConfigStore>().current();
+                                    let request = llm::Request::critique(&loaded);
                                     let handle = tauri::async_runtime::spawn(llm::run(
                                         app.clone(),
                                         loaded,
+                                        request,
                                         text,
                                     ));
                                     app.state::<InFlight>().set(handle);

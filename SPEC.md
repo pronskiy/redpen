@@ -19,7 +19,7 @@
 
 ### Current focus
 
-**Next build: Epic F — translate on double ⌘C, F1.3 (LLM parameters).** The MVP validation items
+**Next build: Epic F — translate on double ⌘C, F1.4 (prompt, config, wire to the card).** The MVP validation items
 below still need Roman and don't block it.
 
 **Now on:** the MVP is code-complete. What remains is **validation, not building.**
@@ -349,7 +349,7 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 |------|-------------|--------|-------|
 | F1.1 | `doublecopy.rs`: pure double-press detector, injected clock, unit tests | ✅ | 14 tests; triple press fires once, suppression forgets the pending press |
 | F1.2 | Passive global key monitor → detector → read the pasteboard after the second press | ✅ | 5 tests for the read; logs only. Checked 2026-11-25 in TextEdit via System Events: double fires, single doesn't, nothing selected stays silent, ⌥⌘E doesn't trigger |
-| F1.3 | `llm.rs` takes prompt, model and effort as parameters; critique path unchanged | 🔲 | |
+| F1.3 | `llm.rs` takes prompt, model and effort as parameters; critique path unchanged | ✅ | `llm::Request`; translation skips the tag splitter entirely. Haiku 5.5 verified live: adaptive thinking + effort `low` accepted, 0.6 s. Critique re-checked end to end |
 | F1.4 | `prompts/translate.md` bundled via `include_str!`; `translate_*` config fields | 🔲 | |
 | F1.5 | Translate fixtures (en / ru / nl) run through the harness | 🔲 | |
 

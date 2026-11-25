@@ -1,4 +1,5 @@
-//! Streams a critique from the Anthropic Messages API.
+//! Streams a critique, or a translation (Epic F), from the Anthropic Messages API. The two
+//! differ only in the `Request`; streaming, abort and error handling are shared.
 //!
 //! `evals/run.sh` is the reference implementation — it has been posting this exact body
 //! since before there was any Rust, and every quirk encoded here was learned there against
@@ -306,6 +307,34 @@ mod tests {
     fn streaming_is_always_on() {
         assert_eq!(build_body("claude-sonnet-5", "low", "s", "t")["stream"], true);
     }
+
+    #[test]
+    fn the_critique_request_is_exactly_what_the_config_says() {
+        // F1.3 moved these out of `run`; the critique must not notice.
+        let loaded = crate::config::Loaded {
+            config: crate::config::Config {
+                model: "claude-sonnet-5".into(),
+                effort: "medium".into(),
+                system_prompt_path: "/p/critique.md".into(),
+                ..Default::default()
+            },
+            system_prompt: "PROMPT".into(),
+        };
+        let r = Request::critique(&loaded);
+        assert_eq!((r.model.as_str(), r.effort.as_str(), r.system_prompt.as_str()), ("claude-sonnet-5", "medium", "PROMPT"));
+        assert!(r.strip_tags, "the critique's tag block must still be stripped");
+        assert!(r.prompt_source.contains("/p/critique.md"));
+    }
+
+    #[test]
+    fn thinking_stays_adaptive_for_the_fast_tier_too() {
+        // Decision #16, and verified live 2026-11-25: claude-haiku-5-5 accepts adaptive
+        // thinking and output_config.effort "low" (200 in 0.6 s).
+        let b = build_body("claude-haiku-5-5", "low", "s", "t");
+        assert_eq!(b["thinking"]["type"], "adaptive");
+        assert_eq!(b["output_config"]["effort"], "low");
+        assert!(b.get("fallbacks").is_none());
+    }
 }
 
 // ---------------------------------------------------------------------------------------
@@ -384,7 +413,35 @@ fn network_message(host: &str, e: &reqwest::Error) -> String {
     }
 }
 
-pub async fn run(app: AppHandle, loaded: Loaded, text: String) {
+/// What one call asks for. The critique and the translation differ only here.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Request {
+    /// Names the call in logs and errors: "critique" or "translation".
+    pub kind: &'static str,
+    pub model: String,
+    pub effort: String,
+    pub system_prompt: String,
+    /// Where the prompt came from, named in the error when it turns out empty.
+    pub prompt_source: String,
+    /// The critique ends in a ```json tag block that must never reach the card (C1.2). A
+    /// translation has no such block, and a fence in it belongs to the translated text.
+    pub strip_tags: bool,
+}
+
+impl Request {
+    pub fn critique(loaded: &Loaded) -> Self {
+        Self {
+            kind: "critique",
+            model: loaded.config.model.clone(),
+            effort: loaded.config.effort.clone(),
+            system_prompt: loaded.system_prompt.clone(),
+            prompt_source: format!("system_prompt_path = {:?}", loaded.config.system_prompt_path),
+            strip_tags: true,
+        }
+    }
+}
+
+pub async fn run(app: AppHandle, loaded: Loaded, req: Request, text: String) {
     let fail = |msg: String| {
         eprintln!("[redpen] {msg}");
         let _ = app.emit(EVENT_ERROR, msg);
@@ -393,16 +450,13 @@ pub async fn run(app: AppHandle, loaded: Loaded, text: String) {
     if loaded.config.api_key.is_empty() {
         return fail("no API key in config.json".into());
     }
-    if loaded.system_prompt.trim().is_empty() {
-        return fail(format!(
-            "system prompt is empty (system_prompt_path = {:?})",
-            loaded.config.system_prompt_path
-        ));
+    if req.system_prompt.trim().is_empty() {
+        return fail(format!("system prompt is empty ({})", req.prompt_source));
     }
 
     let url = format!("{}/v1/messages", loaded.config.base_url.trim_end_matches('/'));
     let host = host_of(&loaded.config.base_url);
-    let body = build_body(&loaded.config.model, &loaded.config.effort, &loaded.system_prompt, &text);
+    let body = build_body(&req.model, &req.effort, &req.system_prompt, &text);
 
     let client = match reqwest::Client::builder()
         .connect_timeout(CONNECT_TIMEOUT)
@@ -413,19 +467,19 @@ pub async fn run(app: AppHandle, loaded: Loaded, text: String) {
         Err(e) => return fail(format!("could not build the HTTP client: {e}")),
     };
 
-    let mut req = client
+    let mut http = client
         .post(&url)
         .header("x-api-key", &loaded.config.api_key)
         .header("anthropic-version", "2023-06-01")
         .header("content-type", "application/json");
-    if supports_fallbacks(&loaded.config.model) {
-        req = req.header("anthropic-beta", "server-side-fallback-2026-07-01");
+    if supports_fallbacks(&req.model) {
+        http = http.header("anthropic-beta", "server-side-fallback-2026-07-01");
     }
 
     let _ = app.emit(EVENT_START, ());
     let started = std::time::Instant::now();
 
-    let resp = match req.json(&body).send().await {
+    let resp = match http.json(&body).send().await {
         Ok(r) => r,
         Err(e) => {
             // Full chain to the log, one actionable line to the card.
@@ -449,7 +503,7 @@ pub async fn run(app: AppHandle, loaded: Loaded, text: String) {
     let mut stop_reason = String::from("end_turn");
     let mut first_token: Option<std::time::Duration> = None;
     let mut chars = 0usize;
-    let mut splitter = ProseSplitter::default();
+    let mut splitter = req.strip_tags.then(ProseSplitter::default);
 
     while let Some(item) = stream.next().await {
         let bytes = match item {
@@ -459,9 +513,9 @@ pub async fn run(app: AppHandle, loaded: Loaded, text: String) {
                 // Whatever is already on screen stays there — a critique cut short is worth
                 // more than a cleared card.
                 return fail(if e.is_timeout() {
-                    format!("{host} stopped responding mid-critique")
+                    format!("{host} stopped responding mid-{}", req.kind)
                 } else {
-                    format!("connection to {host} dropped mid-critique")
+                    format!("connection to {host} dropped mid-{}", req.kind)
                 });
             }
         };
@@ -469,7 +523,10 @@ pub async fn run(app: AppHandle, loaded: Loaded, text: String) {
             match parse_frame(&frame) {
                 Chunk::Text(t) => {
                     // C1.2: the trailing tag block never reaches the webview.
-                    let visible = splitter.push(&t);
+                    let visible = match splitter.as_mut() {
+                        Some(s) => s.push(&t),
+                        None => t,
+                    };
                     if visible.is_empty() {
                         continue;
                     }
@@ -492,13 +549,13 @@ pub async fn run(app: AppHandle, loaded: Loaded, text: String) {
     }
 
     // Anything still held back was never a fence.
-    let tail = splitter.finish();
+    let tail = splitter.as_mut().map(ProseSplitter::finish).unwrap_or_default();
     if !tail.is_empty() {
         chars += tail.chars().count();
         let _ = app.emit(EVENT_DELTA, tail);
     }
     // Parsed but never displayed — Epic E's journal consumes these (decision #6).
-    if let Some(tags) = splitter.tags() {
+    if let Some(tags) = splitter.as_ref().and_then(ProseSplitter::tags) {
         println!("[redpen] tags: [{}]", tags.join(", "));
         let _ = app.emit(EVENT_TAGS, tags);
     }
@@ -507,7 +564,8 @@ pub async fn run(app: AppHandle, loaded: Loaded, text: String) {
         return fail("the model declined this text".into());
     }
     println!(
-        "[redpen] critique done: {chars} chars, first token {} ms, total {} ms, stop={stop_reason}",
+        "[redpen] {} done: {chars} chars, first token {} ms, total {} ms, stop={stop_reason}",
+        req.kind,
         first_token.map(|d| d.as_millis()).unwrap_or(0),
         started.elapsed().as_millis()
     );
