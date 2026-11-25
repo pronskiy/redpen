@@ -250,6 +250,32 @@ pub fn position_at_mouse(app: &AppHandle) {
     });
 }
 
+/// Epic D: put the panel beside the selection when the app told us where it is, at the
+/// mouse otherwise. The geometry is `anchor::place`, pure and unit-tested; this only feeds it
+/// the card size and the visible frame of the screen the selection is on.
+pub fn position_at(app: &AppHandle, anchor: Option<crate::anchor::Rect>) {
+    let Some(sel) = anchor else {
+        position_at_mouse(app);
+        return;
+    };
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        let Some(mtm) = MainThreadMarker::new() else { return };
+        let Some(window) = handle.get_webview_window(LABEL) else { return };
+        let Ok(ptr) = window.ns_window() else { return };
+        if ptr.is_null() {
+            return;
+        }
+        let ns: &NSWindow = unsafe { &*(ptr as *const NSWindow) };
+        let size = ns.frame().size;
+        let centre = NSPoint::new(sel.x + sel.w / 2.0, sel.y + sel.h / 2.0);
+        let v = screen_for_point(centre, mtm).map(|s| s.visibleFrame()).unwrap_or_else(|| ns.frame());
+        let visible = crate::anchor::Rect { x: v.origin.x, y: v.origin.y, w: v.size.width, h: v.size.height };
+        let (x, y) = crate::anchor::place(sel, size.width, size.height, visible);
+        ns.setFrameOrigin(NSPoint::new(x, y));
+    });
+}
+
 /// The screen the point falls on. Secondary displays sit at negative or offset coordinates
 /// in the same global space, so this is a plain containment test — no per-screen maths.
 fn screen_for_point(point: NSPoint, mtm: MainThreadMarker) -> Option<objc2::rc::Retained<NSScreen>> {
@@ -547,6 +573,9 @@ where
         if let Some(pid) = activated_pid {
             if pid != our_pid {
                 PREVIOUS_APP.store(pid, Ordering::Relaxed);
+                // Epic D: Electron needs a second or two to build its accessibility tree,
+                // so ask now rather than at the hotkey.
+                crate::anchor::wake(pid);
             }
         }
         // Our own hand-back is not the user walking away, so it must not dismiss.
@@ -573,6 +602,7 @@ where
         let pid = front.processIdentifier();
         if pid != our_pid {
             PREVIOUS_APP.store(pid, Ordering::Relaxed);
+            crate::anchor::wake(pid);
         }
     }
 

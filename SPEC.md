@@ -20,7 +20,7 @@
 
 ### Current focus
 
-**Next build: Epic D — card at the selection, D2.1 (AX lookup in the app).** Epic F is built; only its dogfood week is left (Roman). The MVP validation items
+**Next: Epic D — built; its remaining guardrails need Roman (by eye, two displays, a day with the switches on).** Epic F: only its dogfood week. Epic F is built; only its dogfood week is left (Roman). The MVP validation items
 below still need Roman and don't block it.
 
 **Now on:** the MVP is code-complete. What remains is **validation, not building.**
@@ -91,7 +91,7 @@ Consequence for priorities: the panel (Epics B–C) carries no defensible value 
 | Core principle | **Never insert, replace, or paste anything** | The entire thesis. No paste-back code path exists in this codebase |
 | Translation trigger | Double ⌘C (≤ ~400 ms), seen by a passive global NSEvent key monitor; the pasteboard is read, not written | Never consumes ⌘C and needs no permission beyond Accessibility. The target app has already copied, so no synthetic ⌘C and no restore. Decision #38 |
 | Translation model | `translate_model` (default `claude-sonnet-5`), `translate_effort` `low`, prompt compiled in | Must beat a browser tab on speed; low effort is the lever, not a smaller model. Decisions #43, #44 |
-| Caret positioning | Epic D: AX selection rect → field frame → mouse, decided per app by the D1 probe; Swift shim (`swift-rs`) unless D1 shows objc2 suffices | Raw AX C API from Rust is ~120 lines of unsafe FFI; a `@_cdecl` Swift function is 15 lines. Panel positions at the mouse cursor until then |
+| Caret positioning | Epic D: AX selection rect → field frame → mouse, in `anchor.rs` on `objc2-application-services`; apps asked to build their tree on activation | Measured per app by `scripts/ax-probe.swift` (D1). Decisions #48–#52 | Raw AX C API from Rust is ~120 lines of unsafe FFI; a `@_cdecl` Swift function is 15 lines. Panel positions at the mouse cursor until then |
 | Model | `claude-sonnet-5`, adaptive thinking, `output_config.effort: "medium"` | Decision #25 (supersedes #15). Effort — not model tier — is the latency lever; thinking is on by default and renders as a blank card until it finishes (decision #16). This tier does not accept `fallbacks` (decision #24) |
 | Tag vocabulary | Fixed 20-tag list, embedded in the prompt itself | Epic E cannot aggregate freeform tags. The harness extracts the list from the prompt and validates every response against it, so there is one source of truth |
 | License hygiene | Read WritingTools for techniques; copy zero lines | WritingTools is GPL-3.0; repo visibility here is undecided, so keep the codebase unencumbered |
@@ -369,9 +369,9 @@ Shape depends on D1, so these steps are deliberately lighter.
 
 | Step | Description | Status | Notes |
 |------|-------------|--------|-------|
-| D2.1 | AX lookup in the app: tiers from D1, 50 ms budget, off the main thread | 🔲 | |
-| D2.2 | `panel::position_at_rect`: below the selection, flip above, clamp | 🔲 | |
-| D2.3 | Both triggers use it; mouse stays the fallback | 🔲 | |
+| D2.1 | AX lookup in the app: tiers from D1, 50 ms budget, off the main thread | ✅ | `anchor.rs` on `objc2-application-services`, not a Swift shim (#51); answers in 0–13 ms |
+| D2.2 | `panel::position_at_rect`: below the selection, flip above, clamp | ✅ | `anchor::place` (pure, 10 tests) + `panel::position_at` |
+| D2.3 | Both triggers use it; mouse stays the fallback | ✅ | the Electron/Chromium switch is set as each app activates (#52); each lookup is logged as `anchor: …` |
 
 **Steps (detail):**
 
@@ -383,10 +383,10 @@ Shape depends on D1, so these steps are deliberately lighter.
 
 | Guardrail | Criteria (pass/fail) | Status | Actual outcome |
 |-----------|----------------------|--------|----------------|
-| Beside the selection | In every app D1 marked usable, the card appears next to the selection, 10 tries each | 🔲 | |
+| Beside the selection | In every app D1 marked usable, the card appears next to the selection, 10 tries each | 🔄 | 2026-11-25, one scripted try per app, checked by the card's frame against the reported rect: TextEdit, Safari and Chrome 8 pt under the selected words, left edges aligned; VS Code 8 pt under the caret line; Slack flipped above the message box (no room below). Not 10 tries, and not yet seen by eye |
 | Never worse | In every other app it appears at the mouse as before; never off-screen, never over the selected text | 🔲 | |
 | Two displays | Selection on the secondary display → card on that display (the classic flip bug, decision #29) | 🔲 | |
-| Speed | Hotkey → visible panel still < 300 ms | 🔲 | |
+| Speed | Hotkey → visible panel still < 300 ms | ✅ | panel visible 0–4 ms after the lookup, which itself took 0–13 ms |
 | Switches are safe | Carried from D1: with `AXManualAccessibility` set on Chrome, Slack and VS Code, a day of use shows no lag or odd window behaviour (Roman) | 🔲 | |
 
 ---
@@ -560,6 +560,8 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 | 48 | 2026-11-25 | Epic D starts with a probe gate (D1) that can park it | What apps report through Accessibility can't be predicted, and the known risk is exactly the apps Roman lives in (Chromium/Electron). A Swift CLI measures it in his apps first; the gate parks the epic if fewer than half the apps, or fewer than two of Slack/Chrome/VS Code, report something usable | Roman |
 | 49 | 2026-11-25 | Card goes 8 pt below the selection, flips above when there's no room; 50 ms AX budget | Below keeps the line you just wrote visible above the card, the way inline hints sit. 50 ms rather than the 200 ms first planned, because the card shows in 3 ms today and the guardrail is 300 ms; a slower app simply keeps the mouse placement | Claude |
 | 50 | 2026-11-25 | D1 passes; Epic D goes on to D2 without the hand-checked rows | Roman asked to decide on what was measured. 5 of 7 apps give an anchor, including all three where he spends the day, and every answer is fast. Accepted risks: no rect was seen drawn (D2's first guardrail will show a wrong one immediately, at no cost beyond a misplaced card), and the Electron switch's side effects are judged in daily use instead of up front | Claude |
+| 51 | 2026-11-25 | The AX lookup is Rust on `objc2-application-services`, not a Swift shim — reverses the approach in #9 | #9 weighed ~120 lines of hand-written unsafe FFI against 15 lines of Swift. The probe showed the real job is a dozen calls plus a tree walk, and `objc2-application-services` wraps them with types, in the same `objc2` family the app already depends on. No Swift toolchain step in the build or CI | Claude |
+| 52 | 2026-11-25 | `AXManualAccessibility` is set on every app as it activates; `AXEnhancedUserInterface` only on Chromium browsers | Electron and Chromium build their tree on request and need 1–2 s, so asking at the hotkey is too late. Electron's switch is a no-op elsewhere. Chromium ignores it and needs `AXEnhancedUserInterface`, which has a reputation for odd window animations in native apps, so it goes to a fixed list of Chromium bundle ids only. Without it Chrome gave no anchor in the D2 check; with it, the selection rect in 5 ms | Claude |
 
 ---
 

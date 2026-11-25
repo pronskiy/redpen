@@ -1,4 +1,5 @@
 mod accessibility;
+mod anchor;
 mod capture;
 mod config;
 mod doublecopy;
@@ -58,6 +59,23 @@ fn ui_settings(app: tauri::AppHandle) -> UiSettings {
 fn open_accessibility_settings(app: tauri::AppHandle) {
     if let Err(e) = app.opener().open_url(accessibility::SETTINGS_URL, None::<&str>) {
         eprintln!("[redpen] could not open Accessibility settings: {e}");
+    }
+}
+
+/// Where the selection is, for the card (Epic D), with what the app answered in the log.
+fn located() -> Option<anchor::Rect> {
+    let started = std::time::Instant::now();
+    let found = anchor::selection_anchor();
+    let ms = started.elapsed().as_millis();
+    match found {
+        Some((rect, tier)) => {
+            println!("[redpen] anchor: {tier:?} {:.0}×{:.0} in {ms} ms", rect.w, rect.h);
+            Some(rect)
+        }
+        None => {
+            println!("[redpen] anchor: none in {ms} ms, at the mouse");
+            None
+        }
     }
 }
 
@@ -166,7 +184,9 @@ pub fn run() {
                         // show after). So the focus check cannot live here, before the show
                         // — it has to run per ⌘C attempt, below.
                         let shows_before = panel::shows_so_far();
-                        panel::position_at_mouse(&app);
+                        // Epic D: ask where the selection is *before* the show, which can
+                        // move focus for a frame. Bounded by anchor::BUDGET.
+                        panel::position_at(&app, located());
                         panel::show(&app);
                         let _ = app.emit(llm::EVENT_START, "critique");
 
@@ -333,7 +353,7 @@ pub fn run() {
                         return;
                     };
                     println!("[redpen] double ⌘C: {} chars{}", text.chars().count(), preview(&text));
-                    panel::position_at_mouse(&app);
+                    panel::position_at(&app, located());
                     panel::show(&app);
                     let _ = app.emit(llm::EVENT_START, "translation");
                     let loaded = app.state::<ConfigStore>().current();
