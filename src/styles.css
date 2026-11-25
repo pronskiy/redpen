@@ -241,15 +241,28 @@ button:active { background: var(--control-active); }
   border-radius: 4px;
 }
 
-/* Translation (Epic F). Minimal until F2.1: the translation reads as the card's main text,
-   the notes sit under a hairline in the same muted size as a critique's Tell. */
-.translation { margin: 0 0 0.6em; white-space: pre-wrap; }
-.tnotes {
-  margin: 0.4em 0 0;
-  padding: 0.6em 0 0 1.1em;
-  border-top: 1px solid var(--separator);
-  color: var(--muted);
-  font-size: 0.9rem;
+/* Translation (Epic F, F2.1). The translation is the card's main text, a touch larger than a
+   critique's quote because there is nothing competing with it. Notes are set off the way the
+   verdict is, by a rule running the full card width, and read as a gloss: the source phrase
+   in ink, its meaning muted after it. No bullets — a gutter of dots is noise for two lines. */
+.translation {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.45;
+  letter-spacing: -0.005em;
+  white-space: pre-wrap;
 }
-.tnote + .tnote { margin-top: 4px; }
-.tnote b { color: var(--ink); font-weight: 600; }
+.translation + .translation { margin-top: 0.6em; }
+
+.tnotes {
+  list-style: none;
+  margin: var(--pad) calc(-1 * var(--pad)) 0;
+  padding: 12px var(--pad) 2px;
+  border-top: 1px solid var(--separator);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+.tnote + .tnote { margin-top: 8px; }
+.tnote .phrase { font-weight: 600; color: var(--ink); }
+.tnote .phrase::after { content: " —"; font-weight: 400; color: var(--muted); }
+.tnote .gloss { color: var(--muted); }

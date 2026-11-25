@@ -247,20 +247,40 @@ function renderNote(note: Note): string {
 }
 
 /**
- * The translate prompt's shape: the translation, then optionally a `---` line and notes,
- * each `- **<phrase>** — <note>`. Minimal for now; F2.1 gives it its own design.
+ * The translate prompt's shape (prompts/translate.md):
+ *
+ *   <translation, any number of paragraphs>
+ *   ---
+ *   - **<phrase from the source>** — <note, in Russian>
+ *
+ * The translation is the card's main text. The notes hang below a full-width rule, the way
+ * a critique's verdict is set off, with the source phrase in ink and the note muted.
+ *
+ * Streaming: the `---` arrives a character at a time, so until the stream ends a trailing
+ * line of nothing but dashes is held back rather than flashed as a stray "-" under the
+ * translation. A note shows once its phrase is complete; its explanation then streams in.
  */
-function renderTranslation(md: string): string {
-  const [body, ...rest] = md.split(/^---\s*$/m);
-  const paras = body.trim().split(/\n{2,}/).map((p) => `<p class="translation">${esc(p)}</p>`).join("");
-  const notes = rest.join("---").split("\n").map((l) => l.match(/^\s*-\s*\*\*(.+?)\*\*\s*[—–-]\s*(.*)$/)).filter(Boolean)
-    .map((m) => `<li class="tnote"><b>${esc(m![1])}</b> — ${esc(m![2])}</li>`).join("");
+function renderTranslation(md: string, done: boolean): string {
+  const [rawBody, ...rest] = md.split(/^---\s*$/m);
+  let body = rawBody;
+  if (!done && !rest.length) body = body.replace(/\n-{1,3}\s*$/, "");
+
+  const paras = body.trim()
+    ? body.trim().split(/\n{2,}/).map((p) => `<p class="translation">${esc(p)}</p>`).join("")
+    : "";
+
+  const notes = rest.join("---").split("\n")
+    .map((l) => l.match(/^\s*[-*]\s*\*\*(.+?)\*\*\s*(?:[—–-]\s*)?(.*)$/))
+    .filter((m): m is RegExpMatchArray => m !== null)
+    .map((m) => `<li class="tnote"><span class="phrase">${esc(m[1])}</span>${m[2] ? ` <span class="gloss">${esc(m[2])}</span>` : ""}</li>`)
+    .join("");
+
   return paras + (notes ? `<ul class="tnotes">${notes}</ul>` : "");
 }
 
 function render() {
   if (mode === "translation") {
-    out.innerHTML = renderTranslation(buffer);
+    out.innerHTML = renderTranslation(buffer, streamDone);
     out.scrollTop = out.scrollHeight;
     return;
   }
@@ -299,7 +319,7 @@ listen<string>("critique-start", (e) => {
   streamDone = false;
   showingCritique = mode === "critique";
   out.innerHTML = "";
-  setStatus("reading…");
+  setStatus(mode === "translation" ? "translating…" : "reading…");
 });
 
 // Thinking output is hidden by default on these models (decision #16), so without this the

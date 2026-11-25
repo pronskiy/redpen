@@ -19,7 +19,7 @@
 
 ### Current focus
 
-**Next: Epic F — the four F1 guardrails that need real apps (needs Roman), then F2.1.** The MVP validation items
+**Next: Epic F — F2.3 (manual tests, README), then the F2 guardrails.** The MVP validation items
 below still need Roman and don't block it.
 
 **Now on:** the MVP is code-complete. What remains is **validation, not building.**
@@ -385,7 +385,7 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 | Guardrail | Criteria (pass/fail) | Status | Actual outcome |
 |-----------|----------------------|--------|----------------|
 | No false triggers | 50 ordinary single ⌘C across Slack, Safari, VS Code and Terminal → 0 translations | ✅ | 2026-11-25, `scripts/translate-guardrails.py`: 0 translations from 150 single ⌘C over 3 runs |
-| Triggers everywhere | Double ⌘C triggers in each of those 4 apps, including with the Russian layout active | 🔄 | TextEdit, Safari, VS Code and Slack each triggered (the misses were the script selecting the URL bar or an empty editor); Russian layout passes in TextEdit and Safari. **Terminal: never**, because Roman's Terminal has Secure Keyboard Entry on, which hides keystrokes from every other app. Needs Roman's call |
+| Triggers everywhere | Double ⌘C triggers in each of those 4 apps, including with the Russian layout active | ✅ | TextEdit, Safari, VS Code and Slack each triggered (the misses were the script selecting the URL bar or an empty editor); Russian layout passes in TextEdit and Safari. **Terminal: never**, because Roman's Terminal has Secure Keyboard Entry on, which hides keystrokes from every other app. Accepted by Roman as a limitation, decision #45 |
 | ⌥⌘E is not a trigger | 10 critiques, at least one that needed the capture retry → 0 translations | ✅ | 30 critiques over 3 runs → 0 translations. The retry never happened, so that case rests on the unit tests |
 | ⌘C intact | Copy and paste behave normally in every app while redpen runs | ✅ | copy and paste round-tripped in TextEdit, Safari, VS Code and Slack whenever the script had focus |
 | Direction | Fixtures: every English one → Russian, every Russian and Dutch one → English, 12/12 | ✅ | 2026-11-25, Sonnet 5 / `low`: 12/12 in each of 3 runs. For contrast Haiku 5.5 / `low` went wrong 3 times in 4 runs (Dutch and Russian kept out of English), backing #44 |
@@ -395,7 +395,7 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 
 | Step | Description | Status | Notes |
 |------|-------------|--------|-------|
-| F2.1 | Translate-mode render in `src/main.ts`: translation, then notes, streaming | 🔄 | a minimal render landed with F1.4; the real design is still to do |
+| F2.1 | Translate-mode render in `src/main.ts`: translation, then notes, streaming | ✅ | notes set off by a full-width rule like the verdict; a half-streamed `---` is held back; status reads "translating…". Checked in a browser render, light and dark |
 | F2.2 | Mode carried through the events so the critique parser never sees translation output | ✅ | pulled into F1.4: without it the card was blank. `critique-start` carries `"critique"` or `"translation"` |
 | F2.3 | Manual test entries in `docs/manual-tests.md`; README "Using it" row for double ⌘C | 🔲 | |
 
@@ -482,6 +482,7 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 | 42 | 2026-11-25 | Notes are in Russian; translation defaults to `claude-haiku-5-5` at effort `low` | Russian because it is Roman's L1 whichever way the text goes. A fast model because translation has to beat a browser tab, and separate `translate_model`/`translate_effort` keep the critique on Sonnet 5 at medium (#25). Thinking is not disabled (#16). Proposed by Claude, open to Roman's review | Claude |
 | 43 | 2026-11-25 | The translate prompt is compiled in, with an optional `translate_prompt_path` override | The critique prompt is referenced by path (#23) because it is tuned daily; the translate prompt isn't, and translation should work with zero setup | Claude |
 | 44 | 2026-11-25 | Translation defaults to `claude-sonnet-5` at effort `low`, not Haiku — reverses the model half of #42 | Sampled live on the same texts. Haiku 5.5 at `low` sent Dutch into Russian, echoed a Russian source and corrected itself mid-answer, left an English sentence untranslated, and calqued idioms; at `medium` it still read "on second thought" as "во-вторых". Sonnet 5 at `low` got every sample right ("ik heb er een hard hoofd in" → "I have my doubts", "table this" → отложить) with the first token in 0.5–1.1 s. Effort, not tier, stays the latency lever, as #16 says for the critique | Claude |
+| 45 | 2026-11-25 | Double ⌘C not working in Terminal with Secure Keyboard Entry on is accepted as a limitation | Secure input hides keystrokes from every other process, and any way of observing them (NSEvent monitor, CGEventTap) is blind to it; only pasteboard polling would see the copies, and #38 rejected that for false triggers. Same class of limit as capture in a password field | Roman |
 
 ---
 
