@@ -22,16 +22,31 @@ import ApplicationServices
 let args = CommandLine.arguments
 let fix = args.contains("--fix")
 let draw = args.contains("--draw")
-if let i = args.firstIndex(of: "--delay"), i + 1 < args.count, let d = Double(args[i + 1]) {
-    Thread.sleep(forTimeInterval: d)
+if let i = args.firstIndex(of: "--delay"), i + 1 < args.count, let d = Int(args[i + 1]) {
+    for left in stride(from: d, to: 0, by: -1) {
+        FileHandle.standardError.write("switch to the app… \(left)\n".data(using: .utf8)!)
+        Thread.sleep(forTimeInterval: 1)
+    }
 }
 
 guard AXIsProcessTrusted() else {
     print(#"{"error":"no Accessibility permission for whatever runs this"}"#)
     exit(2)
 }
-guard let front = NSWorkspace.shared.frontmostApplication else { exit(1) }
-let app = AXUIElementCreateApplication(front.processIdentifier)
+// Not NSWorkspace.frontmostApplication: a command-line tool has no run loop to receive its
+// updates, so after --delay it still names whatever was frontmost at launch (the terminal).
+// The system-wide element's focused application is asked fresh every time.
+let systemWide = AXUIElementCreateSystemWide()
+var focusedApp: AnyObject?
+var pid: pid_t = 0
+if AXUIElementCopyAttributeValue(systemWide, kAXFocusedApplicationAttribute as CFString, &focusedApp) == .success {
+    AXUIElementGetPid(focusedApp as! AXUIElement, &pid)
+}
+guard pid != 0, let front = NSRunningApplication(processIdentifier: pid) else {
+    print(#"{"error":"no focused application"}"#)
+    exit(1)
+}
+let app = AXUIElementCreateApplication(pid)
 AXUIElementSetMessagingTimeout(app, 0.2)
 
 if args.contains("--reset") {
