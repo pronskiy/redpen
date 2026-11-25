@@ -19,7 +19,7 @@
 
 ### Current focus
 
-**Next build: Epic F — translate on double ⌘C, F1.5 (fixtures), then the F1 guardrails.** The MVP validation items
+**Next: Epic F — the four F1 guardrails that need real apps (needs Roman), then F2.1.** The MVP validation items
 below still need Roman and don't block it.
 
 **Now on:** the MVP is code-complete. What remains is **validation, not building.**
@@ -351,7 +351,7 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 | F1.2 | Passive global key monitor → detector → read the pasteboard after the second press | ✅ | 5 tests for the read; logs only. Checked 2026-11-25 in TextEdit via System Events: double fires, single doesn't, nothing selected stays silent, ⌥⌘E doesn't trigger |
 | F1.3 | `llm.rs` takes prompt, model and effort as parameters; critique path unchanged | ✅ | `llm::Request`; translation skips the tag splitter entirely. Haiku 5.5 verified live: adaptive thinking + effort `low` accepted, 0.6 s. Critique re-checked end to end |
 | F1.4 | `prompts/translate.md` bundled via `include_str!`; `translate_*` config fields | ✅ | wired to the card; live in the app: first token 645–852 ms. Default model switched to Sonnet 5 / `low` after sampling (#44). Known miss: a prompt-injection line gets a note about the task itself |
-| F1.5 | Translate fixtures (en / ru / nl) run through the harness | 🔲 | |
+| F1.5 | Translate fixtures (en / ru / nl) run through the harness | ✅ | `evals/translate.sh`, a sibling of `run.sh`; Sonnet 5 / `low` 36/36 over 3 runs |
 
 **Steps (detail):**
 
@@ -378,7 +378,7 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
   - **<phrase from the source>** — <note, in Russian>
   ```
   The `---` and the notes are omitted when there is nothing to explain. The prompt never comments on the quality of the source text: this is not a critique.
-- **F1.5 — Fixtures.** Deliverable: `docs/translate-fixtures/` with 12 short texts (4 English, 4 Russian, 4 Dutch; in each language 2 idiomatic and 2 plain), run with the translate prompt and model through `evals/run.sh` (extended to take a prompt and model) or a sibling script. Results are read by hand against the guardrails below.
+- **F1.5 — Fixtures.** Deliverable: `docs/translate-fixtures/` with 12 short texts (4 English, 4 Russian, 4 Dutch; in each language 2 idiomatic and 2 plain), run with the translate prompt and model through `evals/run.sh` (extended to take a prompt and model) or a sibling script. *Built as `evals/translate.sh`: run.sh is shaped around the critique's tag block and rubric, which a translation doesn't have. The file name carries the expectation (`en-*` → Russian, `*-idiom-*` → notes), so both guardrails below are checked mechanically.* Results are read by hand against the guardrails below.
 
 **Exit guardrails — Phase F1 → F2**
 
@@ -388,8 +388,8 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 | Triggers everywhere | Double ⌘C triggers in each of those 4 apps, including with the Russian layout active | 🔲 | |
 | ⌥⌘E is not a trigger | 10 critiques, at least one that needed the capture retry → 0 translations | 🔲 | |
 | ⌘C intact | Copy and paste behave normally in every app while redpen runs | 🔲 | |
-| Direction | Fixtures: every English one → Russian, every Russian and Dutch one → English, 12/12 | 🔲 | |
-| Notes earn their place | Plain fixtures get no notes; each idiomatic one gets a note on its idiom | 🔲 | |
+| Direction | Fixtures: every English one → Russian, every Russian and Dutch one → English, 12/12 | ✅ | 2026-11-25, Sonnet 5 / `low`: 12/12 in each of 3 runs. For contrast Haiku 5.5 / `low` went wrong 3 times in 4 runs (Dutch and Russian kept out of English), backing #44 |
+| Notes earn their place | Plain fixtures get no notes; each idiomatic one gets a note on its idiom | ✅ | Sonnet: 3/3 runs clean, every note in Russian, read by eye once. Haiku put a note on a plain text once |
 
 #### Phase F2 — Card
 
