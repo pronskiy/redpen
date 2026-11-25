@@ -1,7 +1,6 @@
 mod accessibility;
 mod capture;
 mod config;
-#[allow(dead_code)] // wired to the key monitor in F1.2
 mod doublecopy;
 mod llm;
 mod panel;
@@ -178,13 +177,17 @@ pub fn run() {
                             panel::wait_for_show(shows_before, std::time::Duration::from_millis(250));
 
                             let focus_app = app.clone();
-                            match capture::selection(move || {
+                            // Capture's synthetic ⌘C must not read as a double ⌘C (Epic F).
+                            doublecopy::capture_started();
+                            let captured = capture::selection(move || {
                                 // Re-checked before every attempt, because the panel may have
                                 // stolen focus since the last one. A no-op unless we really
                                 // are the active app.
                                 panel::yield_focus_to_source(&focus_app);
                                 panel::wait_until_not_frontmost(std::time::Duration::from_millis(250));
-                            }) {
+                            });
+                            doublecopy::capture_finished();
+                            match captured {
                                 Ok(text) => {
                                     println!("[redpen] captured {} chars{}", text.chars().count(), preview(&text));
                                     let loaded = app.state::<ConfigStore>().current();
@@ -301,6 +304,17 @@ pub fn run() {
                     println!("[redpen] dismissed — request aborted");
                 }
             });
+            // F1.2: double ⌘C. Only logs for now; F1.4 puts the translation on the card.
+            doublecopy::install(|baseline| {
+                std::thread::spawn(move || {
+                    let ms = std::time::Duration::from_millis;
+                    match doublecopy::copied_text(&capture::MacClipboard, baseline, ms(300), ms(5), ms(20)) {
+                        Some(text) => println!("[redpen] double ⌘C: {} chars{}", text.chars().count(), preview(&text)),
+                        None => println!("[redpen] double ⌘C, but no text was copied"),
+                    }
+                });
+            });
+
             println!(
                 "[redpen] main window ready · visible={:?} · config={}",
                 window.is_visible(),
