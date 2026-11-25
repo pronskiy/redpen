@@ -85,13 +85,10 @@ pub fn place(anchor: Rect, card_w: f64, card_h: f64, visible: Rect) -> (f64, f64
     let above = anchor.top() + GAP;
     let room_below = below >= visible.y;
     let room_above = above + card_h <= visible.top();
-    let y = if room_below || !room_above {
-        // Neither side fits: keep it below and let the clamp pull it up. Covering part of
-        // a tall selection beats leaving the screen.
-        if room_below { below } else if anchor.y - visible.y >= visible.top() - anchor.top() { below } else { above }
-    } else {
-        above
-    };
+    // Neither side fits: take the side with more space and let the clamp pull it in.
+    // Covering part of a tall selection beats leaving the screen.
+    let more_space_below = anchor.y - visible.y >= visible.top() - anchor.top();
+    let y = if room_below || (!room_above && more_space_below) { below } else { above };
     let x = anchor.x;
     let max_x = visible.x + visible.w - card_w;
     let max_y = visible.top() - card_h;
