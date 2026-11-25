@@ -20,7 +20,7 @@
 
 ### Current focus
 
-**Next build: Epic D — card at the selection, D1.1 (AX probe).** Epic F is built; only its dogfood week is left (Roman). The MVP validation items
+**Next build: Epic D — card at the selection, D2.1 (AX lookup in the app).** Epic F is built; only its dogfood week is left (Roman). The MVP validation items
 below still need Roman and don't block it.
 
 **Now on:** the MVP is code-complete. What remains is **validation, not building.**
@@ -325,7 +325,7 @@ Applies to both triggers, the critique (⌥⌘E) and the translation (⌘C ⌘C)
 | Step | Description | Status | Notes |
 |------|-------------|--------|-------|
 | D1.1 | `scripts/ax-probe.swift`: what the focused element reports about its selection, and how fast | ✅ | adds a focus tree-walk fallback and treats a zero rect as no answer — both needed for Electron |
-| D1.2 | Run it in the daily apps, scripted where possible; fill the table below | 🔄 | 5 apps scripted 2026-11-25. Telegram, Mail, PhpStorm, Ghostty need Roman: drafts sync, or it is Claude's own terminal. **No rect has been seen drawn yet** — Ghostty has no Screen Recording |
+| D1.2 | Run it in the daily apps, scripted where possible; fill the table below | ✅ | 5 apps scripted 2026-11-25. Telegram, Mail, PhpStorm, Ghostty need Roman: drafts sync, or it is Claude's own terminal. **No rect has been seen drawn yet** — Ghostty has no Screen Recording |
 
 **Steps (detail):**
 
@@ -359,9 +359,9 @@ Findings that shape D2 regardless of the rest: the Electron/Chromium switch (`AX
 
 | Guardrail | Criteria (pass/fail) | Status | Actual outcome |
 |-----------|----------------------|--------|----------------|
-| Worth building | The selection rect or the field frame is correct in at least half the daily apps, **including at least two of Slack, Chrome, VS Code** (where Roman spends the day). Otherwise Epic D is parked with the matrix recorded, and the decision logged | 🔲 | |
-| Fast enough | Every usable tier answers in < 50 ms p95; a slower app is treated as "falls back to the mouse" | 🔲 | |
-| Switches are safe | If `AXManualAccessibility` / `AXEnhancedUserInterface` is needed, it causes no visible side effect in that app (window animation, lag) over a day of use; otherwise it is not used | 🔲 | |
+| Worth building | The selection rect or the field frame is correct in at least half the daily apps, **including at least two of Slack, Chrome, VS Code** (where Roman spends the day). Otherwise Epic D is parked with the matrix recorded, and the decision logged | ✅ | 5 of 7 measured apps give an anchor (TextEdit, Safari, Chrome: the selection; Slack: the message box; VS Code: the caret), all three of Slack/Chrome/VS Code among them. Ghostty and Telegram give nothing; Mail and PhpStorm unmeasured. **Plausible, not seen**: no rect was checked drawn on screen — D2's "beside the selection" guardrail is where that happens. Decision #50 |
+| Fast enough | Every usable tier answers in < 50 ms p95; a slower app is treated as "falls back to the mouse" | ✅ | 0–13 ms everywhere, the tree walk included (single samples per app, not a p95) |
+| Switches are safe | If `AXManualAccessibility` / `AXEnhancedUserInterface` is needed, it causes no visible side effect in that app (window animation, lag) over a day of use; otherwise it is not used | ⏸️ | needed for Chrome, Slack, VS Code; can only be judged in daily use, so it moves to D2's exit guardrails |
 
 #### Phase D2 — Position at the selection
 
@@ -387,6 +387,7 @@ Shape depends on D1, so these steps are deliberately lighter.
 | Never worse | In every other app it appears at the mouse as before; never off-screen, never over the selected text | 🔲 | |
 | Two displays | Selection on the secondary display → card on that display (the classic flip bug, decision #29) | 🔲 | |
 | Speed | Hotkey → visible panel still < 300 ms | 🔲 | |
+| Switches are safe | Carried from D1: with `AXManualAccessibility` set on Chrome, Slack and VS Code, a day of use shows no lag or odd window behaviour (Roman) | 🔲 | |
 
 ---
 
@@ -558,6 +559,7 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 | 47 | 2026-11-25 | Epic D is pulled forward, and covers both the critique and the translation | Roman asked for the card to appear at the selected text rather than at the mouse. Both triggers show the same card, so both get it | Roman |
 | 48 | 2026-11-25 | Epic D starts with a probe gate (D1) that can park it | What apps report through Accessibility can't be predicted, and the known risk is exactly the apps Roman lives in (Chromium/Electron). A Swift CLI measures it in his apps first; the gate parks the epic if fewer than half the apps, or fewer than two of Slack/Chrome/VS Code, report something usable | Roman |
 | 49 | 2026-11-25 | Card goes 8 pt below the selection, flips above when there's no room; 50 ms AX budget | Below keeps the line you just wrote visible above the card, the way inline hints sit. 50 ms rather than the 200 ms first planned, because the card shows in 3 ms today and the guardrail is 300 ms; a slower app simply keeps the mouse placement | Claude |
+| 50 | 2026-11-25 | D1 passes; Epic D goes on to D2 without the hand-checked rows | Roman asked to decide on what was measured. 5 of 7 apps give an anchor, including all three where he spends the day, and every answer is fast. Accepted risks: no rect was seen drawn (D2's first guardrail will show a wrong one immediately, at no cost beyond a misplaced card), and the Electron switch's side effects are judged in daily use instead of up front | Claude |
 
 ---
 
