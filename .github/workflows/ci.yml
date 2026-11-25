@@ -16,7 +16,9 @@ jobs:
     # macOS only, and not as a convenience: `mod panel;` is unconditional in lib.rs and
     # tauri-nspanel / objc2 / enigo are macOS-only dependencies, so the crate genuinely
     # does not compile on another runner. The repo is public, so these minutes are free.
-    runs-on: macos-latest
+    # Intel, not macos-latest: arm64 runners went through a capacity shortage where jobs
+    # were never picked up and got cancelled after 15 min.
+    runs-on: macos-15-intel
 
     steps:
       - uses: actions/checkout@v5

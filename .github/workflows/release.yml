@@ -33,7 +33,9 @@ jobs:
 
   build:
     needs: guard
-    runs-on: macos-latest
+    # Intel, for the same arm64 capacity reason as ci.yml. The build is universal
+    # (--target universal-apple-darwin below), so the host architecture does not matter.
+    runs-on: macos-15-intel
     permissions:
       contents: write # tauri-action creates the draft release and uploads to it
 
