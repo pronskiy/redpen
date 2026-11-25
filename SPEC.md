@@ -11,12 +11,16 @@
 | 2026-08-26 | Initial spec created | Roman |
 | 2026-08-26 | Added §1 Positioning vs Apple Intelligence; decision #13; sherlocking risk | Roman |
 | 2026-08-26 | Reordered Epic A to A3 → A1 → A2; A3.1/A3.2 delivered; decisions #14–19 | Roman |
+| 2026-11-25 | Added Epic F (translate on double ⌘C); decisions #37–#43; §1–§3 and risks updated | Roman |
 
 ### Status legend
 
 🔲 Not started · 🔄 In progress · ✅ Done · ⏸️ Blocked · ❌ Cut
 
 ### Current focus
+
+**Next build: Epic F — translate on double ⌘C, starting at F1.1.** The MVP validation items
+below still need Roman and don't block it.
 
 **Now on:** the MVP is code-complete. What remains is **validation, not building.**
 
@@ -58,6 +62,8 @@ gate is waiting on the corpus. Start here: `docs/corpus/README.md`.
 
 redpen is a macOS menu-bar app for a non-native English writer who wants to *improve*, not just get corrected. Select text anywhere, hit a global hotkey, and a translucent floating callout appears with an LLM critique: what sounds off, why, and how a native speaker would phrase it. Unlike every existing tool in this space (Apple Writing Tools, WritingTools, RewriteBar, Grammarly), redpen **never touches your text** — you read the critique and retype the fix yourself, which is what builds the skill. The system prompt knows the author's L1 is Russian and hunts for calques specifically.
 
+A second mode (Epic F) covers the opposite need, reading rather than writing: press ⌘C twice quickly on text you can't read and the same card shows a translation (English → Russian, anything else → English) with notes on idioms and false friends. It replaces the round trip through a Google Translate tab.
+
 ### Positioning vs Apple Intelligence Writing Tools
 
 As of macOS Tahoe (26.x), Apple ships system-wide Writing Tools: Proofread with per-change explanations, Rewrite (incl. a custom "describe your change" prompt), popup-near-text UX. **The mechanics of redpen are commodity — Apple gives them away for free.** redpen is justified only by what Apple structurally won't build:
@@ -82,6 +88,8 @@ Consequence for priorities: the panel (Epics B–C) carries no defensible value 
 | Config | Strict JSON at `~/Library/Application Support/redpen/config.json`, hot-reloaded; the system prompt is a separate Markdown file referenced by `system_prompt_path` | The system prompt gets edited dozens of times a day during tuning; an editor beats any settings UI — and an escaped 141-line JSON string would beat neither. Annotated copy: `config.example.jsonc`, parsed by nothing |
 | Response contract | Markdown critique + trailing ```json block with error tags | Journal (Epic E) needs structured tags from day one even though the journal ships later. Tags at the *end* so the user reads prose, not streaming JSON |
 | Core principle | **Never insert, replace, or paste anything** | The entire thesis. No paste-back code path exists in this codebase |
+| Translation trigger | Double ⌘C (≤ ~400 ms), seen by a passive global NSEvent key monitor; the pasteboard is read, not written | Never consumes ⌘C and needs no permission beyond Accessibility. The target app has already copied, so no synthetic ⌘C and no restore. Decision #38 |
+| Translation model | `translate_model` (default `claude-haiku-5-5`), `translate_effort` `low`, prompt compiled in | Must beat a browser tab on speed; the critique's model and prompt are untouched. Decisions #42, #43 |
 | Caret positioning | Deferred to Epic D via a Swift shim (`swift-rs`) | Raw AX C API from Rust is ~120 lines of unsafe FFI; a `@_cdecl` Swift function is 15 lines. Panel positions at the mouse cursor until then |
 | Model | `claude-sonnet-5`, adaptive thinking, `output_config.effort: "medium"` | Decision #25 (supersedes #15). Effort — not model tier — is the latency lever; thinking is on by default and renders as a blank card until it finishes (decision #16). This tier does not accept `fallbacks` (decision #24) |
 | Tag vocabulary | Fixed 20-tag list, embedded in the prompt itself | Epic E cannot aggregate freeform tags. The harness extracts the list from the prompt and validates every response against it, so there is one source of truth |
@@ -122,6 +130,8 @@ Consequence for priorities: the panel (Epics B–C) carries no defensible value 
 ```
 
 Hotkey fires → text is captured through the pasteboard → streamed to Anthropic → deltas render live in a non-activating translucent panel near the mouse. Focus never leaves the app the user is typing in.
+
+Second entry point (Epic F): a passive key monitor sees ⌘C twice within ~400 ms → reads the text the target app just put on the pasteboard (no synthetic ⌘C, no restore) → `llm.rs` with the translate prompt and model → the same panel, rendered in translate mode.
 
 ---
 
@@ -318,6 +328,94 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 
 ---
 
+### Epic F — Translate on double ⌘C · Next
+
+**Goal:** replace the Google Translate tab. Select text you can't read in any app, press ⌘C twice quickly, and the card shows a translation, with short notes where a literal reading would mislead. You never leave the app you're in.
+**Success metrics:** double ⌘C → first translated token < 1 s (p50); zero false triggers across a day of ordinary copying; Roman stops opening the Google Translate tab.
+
+**Behaviour (agreed with Roman 2026-11-25):**
+
+- **Trigger:** two ⌘C presses within ~400 ms. A single ⌘C stays an ordinary copy and redpen ignores it.
+- **Direction is automatic, with no setting:** English → Russian; any other language (Russian, Dutch, anything) → English. Decision #39.
+- **Output:** the translation, then notes only where there is something to explain: an idiom, a false friend, a place where the literal reading misleads. Plain text gets no notes. Notes are in Russian whatever the direction. Decisions #41, #42.
+- **Same card as the critique:** non-activating, at the mouse; Esc or a click outside dismisses it and aborts the request.
+- **Clipboard untouched:** the copy was the user's own, so there is nothing to restore.
+- **Nothing selected** (no copy lands after the second press): no card at all. A double ⌘C can be an accident, and an error card there is noise.
+- **Card already open:** its content is replaced and the request in flight is aborted.
+
+#### Phase F1 — Trigger and pipeline
+
+| Step | Description | Status | Notes |
+|------|-------------|--------|-------|
+| F1.1 | `doublecopy.rs`: pure double-press detector, injected clock, unit tests | 🔲 | |
+| F1.2 | Passive global key monitor → detector → read the pasteboard after the second press | 🔲 | |
+| F1.3 | `llm.rs` takes prompt, model and effort as parameters; critique path unchanged | 🔲 | |
+| F1.4 | `prompts/translate.md` bundled via `include_str!`; `translate_*` config fields | 🔲 | |
+| F1.5 | Translate fixtures (en / ru / nl) run through the harness | 🔲 | |
+
+**Steps (detail):**
+
+- **F1.1 — Detector.** Deliverable: a pure `DoubleCopy` with `press(at: Instant) -> bool` and a suppression flag, plus `is_plain_cmd_c(keycode, flags, is_repeat)`, both unit-tested the way `capture_with` is: no real keyboard, no wall clock. Tests: two presses inside the window fire; two outside don't; a third press right after a fire does not fire again (a triple press is one translation); presses while suppressed are ignored; Shift/Option/Control or auto-repeat don't qualify.
+  ```rust
+  pub struct DoubleCopy { window: Duration, last: Option<Instant>, suppressed: bool }
+  impl DoubleCopy {
+      pub fn press(&mut self, at: Instant) -> bool {
+          if self.suppressed { self.last = None; return false; }
+          match self.last.take() {
+              Some(prev) if at.duration_since(prev) <= self.window => true, // `last` stays None
+              _ => { self.last = Some(at); false }
+          }
+      }
+  }
+  ```
+- **F1.2 — Monitor.** Deliverable: `NSEvent::addGlobalMonitorForEventsMatchingMask_handler(KeyDown)` installed at setup next to `panel::install_dismissal`. It is the same mechanism as decision #30: it observes and never consumes, so ⌘C keeps working everywhere, and it needs nothing beyond the Accessibility grant redpen already has. The keycode is `kVK_ANSI_C` (0x08), never a character, so a Russian layout still matches (decision #27). Record the pasteboard `changeCount` at the first press. On a fire, off the main thread, wait ≤ ~300 ms for it to move past that baseline, then read the text; no change, not text, or whitespace means stay silent. Then show the panel at the mouse, emit the start event in translate mode, spawn `llm::run` with the translate parameters, and hand the handle to `InFlight` (which aborts any previous request). **The detector is suppressed while a ⌥⌘E capture runs:** capture sends synthetic ⌘C on the same keycode, up to twice, and a global monitor cannot tell those from the user's.
+- **F1.3 — LLM parameters.** Deliverable: `build_body` / `run` take the system prompt, model and effort from the caller instead of reading the critique's fields; the critique passes exactly what it does today, and the existing parser tests pass untouched. Thinking stays adaptive for both modes (decision #16). Translation output has no trailing ```json block, and the tag splitter passes it through unchanged; a test proves that. **Verify against the live API** that the translate model accepts `output_config.effort` and adaptive thinking; if a tier rejects either, gate it per model the way `fallbacks` is (decision #24).
+- **F1.4 — Prompt and config.** Deliverable: `prompts/translate.md`, compiled in with `include_str!` so translation works with zero setup. `translate_prompt_path`, if set, overrides it and hot-reloads like the critique prompt. New optional config fields: `translate_model` (default `claude-haiku-5-5`), `translate_effort` (default `low`), `translate_prompt_path` (default empty → bundled). Documented in `config.example.jsonc` and the README table. Output contract:
+  ```
+  <translation>
+
+  ---
+  - **<phrase from the source>** — <note, in Russian>
+  ```
+  The `---` and the notes are omitted when there is nothing to explain. The prompt never comments on the quality of the source text: this is not a critique.
+- **F1.5 — Fixtures.** Deliverable: `docs/translate-fixtures/` with 12 short texts (4 English, 4 Russian, 4 Dutch; in each language 2 idiomatic and 2 plain), run with the translate prompt and model through `evals/run.sh` (extended to take a prompt and model) or a sibling script. Results are read by hand against the guardrails below.
+
+**Exit guardrails — Phase F1 → F2**
+
+| Guardrail | Criteria (pass/fail) | Status | Actual outcome |
+|-----------|----------------------|--------|----------------|
+| No false triggers | 50 ordinary single ⌘C across Slack, Safari, VS Code and Terminal → 0 translations | 🔲 | |
+| Triggers everywhere | Double ⌘C triggers in each of those 4 apps, including with the Russian layout active | 🔲 | |
+| ⌥⌘E is not a trigger | 10 critiques, at least one that needed the capture retry → 0 translations | 🔲 | |
+| ⌘C intact | Copy and paste behave normally in every app while redpen runs | 🔲 | |
+| Direction | Fixtures: every English one → Russian, every Russian and Dutch one → English, 12/12 | 🔲 | |
+| Notes earn their place | Plain fixtures get no notes; each idiomatic one gets a note on its idiom | 🔲 | |
+
+#### Phase F2 — Card
+
+| Step | Description | Status | Notes |
+|------|-------------|--------|-------|
+| F2.1 | Translate-mode render in `src/main.ts`: translation, then notes, streaming | 🔲 | |
+| F2.2 | Mode carried through the events so the critique parser never sees translation output | 🔲 | |
+| F2.3 | Manual test entries in `docs/manual-tests.md`; README "Using it" row for double ⌘C | 🔲 | |
+
+**Steps (detail):**
+
+- **F2.1 — Render.** Deliverable: the translation is the main text of the card; notes sit below a hairline as a short list, the source phrase in bold. Same tokens, font size and vibrancy as the critique card; `user-select: none` stays, as it is for the critique.
+- **F2.2 — Mode.** Deliverable: the start event carries `{ mode: "critique" | "translate" }` (or translation gets its own events; builder's call), and the webview dispatches the deltas to the matching renderer. A critique started after a translation, and the other way round, renders correctly.
+- **F2.3 — Docs.** Deliverable: the F1/F2 guardrail checks written up in `docs/manual-tests.md` so they can be rerun on every Tauri or plugin bump; README gains a `⌘C ⌘C` row.
+
+**Exit guardrails — Phase F2 → Epic F done**
+
+| Guardrail | Criteria (pass/fail) | Status | Actual outcome |
+|-----------|----------------------|--------|----------------|
+| Speed | Double ⌘C → first translated token < 1 s p50, n=10 | 🔲 | |
+| Abort | Esc mid-stream → request aborted, no done event | 🔲 | |
+| Replace | Double ⌘C while a critique streams → critique aborted, translation shown | 🔲 | |
+| Dogfood | A week without opening the Google Translate tab; Roman's verdict recorded here | 🔲 | |
+
+---
+
 ## 5. Risk register
 
 | Risk | Likelihood | Impact | Mitigation |
@@ -329,6 +427,9 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 | Secure-input fields blocking synthetic ⌘C | High | Low | Graceful 2 s timeout with a human-readable error; documented limitation |
 | Accessibility permission reset after each dev rebuild | High | Low (annoyance) | Closed for local builds by `scripts/dev-cert.sh`: a certificate moves the designated requirement off the binary hash, so one grant survives every later build. Releases stay ad-hoc and still reset on update — that needs a Developer ID |
 | Apple ships a "teach me" / learner mode in Writing Tools | Low | High | Personal tool, not a business — impact is motivational, not financial. Journal + own-prompt control remain out of Apple's scope; re-evaluate at each WWDC |
+| Double ⌘C misfires or interferes with ordinary copy | Low | Med | Passive monitor never consumes ⌘C; suppressed during ⌥⌘E capture; F1 guardrails count false triggers |
+| Ru→en translation becomes a ghostwriter and erodes the critique habit | Med | Med | Separate mode, card stays `user-select: none`; Roman's dogfood verdict (F2) |
+| The fast model tier rejects `effort` or adaptive thinking | Med | Low | Gate per model like `fallbacks` (#24); checked against the live API in F1.3 |
 
 ---
 
@@ -372,6 +473,13 @@ Rough plan: append tags + timestamp to a local store (SQLite via `rusqlite`, or 
 | 34 | 2026-08-30 | Repo is public; CI on macOS runners, releases minisign-signed only | Resolves #11. Public makes the macOS runners free, which matters because the crate cannot build anywhere else — `mod panel;` is unconditional and tauri-nspanel/objc2/enigo are macOS-only. History was audited before the call: no key, no corpus, only the deliberately un-ignored `docs/corpus/README.md`. Signing means the **updater** key, not Apple: without a Developer ID the bundle stays ad-hoc, Gatekeeper still warns, and an update still costs the Accessibility grant — so the open question below stays open | Roman |
 | 35 | 2026-10-20 | Corrections are drawn in the line itself, in a configurable style; `pen` is the default | Replaces C1.1's per-note choice between a compact form (the fix hanging off an elbow under the quote) and a stacked one (the whole rewrite on its own line). Now each note is one line where every struck run is followed by what replaces it, so the struck words and the fix are read in the same place. Three styles, chosen by `correction_style`: `pen` writes the fix above the struck words like a teacher's mark, `inline` puts it right after them, `tinted` does that on a coloured wash. Prototyped against the 74 real notes in `evals/.out`: 71 merge cleanly, and the 3 whose rewrite shares under 30% of the quote's words keep the stacked fallback, same rule as before. Two fixes came out of the sweep: marks wait until the Native line has finished streaming, and a rewrite that ends the sentence early ("this regard?" -> "this?") now strikes the words it dropped instead of treating them as untouched context. Known miss, also in the old renderer: a moved word ("…Light Mode plans" -> "the plans for … Light Mode") is not struck at its old place | Roman |
 | 36 | 2026-10-20 | While the panel is up, Esc is a registered hotkey, so the first press closes redpen and nothing else | Partly reverses #30. A global monitor only observes, so the Esc that dismissed the panel also reached the source app — in Slack it left the conversation. #30 rejected registering Esc because it would swallow Esc system-wide while the panel is open; that cost turns out to be exactly one press, because that press closes the panel and the hide releases the key. Registration runs on a spawned thread: the plugin keeps its shortcut table locked while a handler runs, and both show (⌥⌘E) and hide (Esc) start inside one. The global monitor stays as the fallback if the grab fails | Roman |
+| 37 | 2026-11-25 | Translation is a second mode, triggered by a double ⌘C | Roman's current loop for text he can't read is copy → Google Translate tab → paste → read → switch back. The card already does everything that loop needs except translate. Decision #1 still holds: there is no paste path in this mode either | Roman |
+| 38 | 2026-11-25 | Double ⌘C is seen by a passive global key monitor, not a registered shortcut and not by polling the pasteboard | Registering ⌘C would swallow every copy system-wide. Polling `changeCount` fires on any copy (menu Copy, scripts, clipboard managers) and cannot tell a double ⌘C from noise. A monitor observes without consuming, is the mechanism #30 already uses, and needs no permission beyond Accessibility. A CGEventTap gives the same result with more code and possibly an Input Monitoring grant | Roman |
+| 39 | 2026-11-25 | Direction is automatic: English → Russian, every other language → English; no setting | Roman's cases are en→ru, ru→en and nl→en. One rule covers all three with nothing to configure | Roman |
+| 40 | 2026-11-25 | Ru→en translation is allowed despite #18 | #18 bans whole-text rewrites in the *critique*, where a clean version gets pasted and the lesson is lost. Translation is a separate mode with its own prompt, and Roman asked for ru→en explicitly. #18 still binds the critique prompt | Roman |
+| 41 | 2026-11-25 | Translation comes with notes, not bare | Roman chose translation + notes over a bare Google-Translate-style result. Notes appear only where a literal reading misleads (idioms, false friends); plain text gets none | Roman |
+| 42 | 2026-11-25 | Notes are in Russian; translation defaults to `claude-haiku-5-5` at effort `low` | Russian because it is Roman's L1 whichever way the text goes. A fast model because translation has to beat a browser tab, and separate `translate_model`/`translate_effort` keep the critique on Sonnet 5 at medium (#25). Thinking is not disabled (#16). Proposed by Claude, open to Roman's review | Claude |
+| 43 | 2026-11-25 | The translate prompt is compiled in, with an optional `translate_prompt_path` override | The critique prompt is referenced by path (#23) because it is tuned daily; the translate prompt isn't, and translation should work with zero setup | Claude |
 
 ---
 
