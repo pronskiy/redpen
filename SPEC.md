@@ -324,8 +324,8 @@ Applies to both triggers, the critique (⌥⌘E) and the translation (⌘C ⌘C)
 
 | Step | Description | Status | Notes |
 |------|-------------|--------|-------|
-| D1.1 | `scripts/ax-probe.swift`: what the focused element reports about its selection, and how fast | 🔲 | |
-| D1.2 | Run it in the daily apps, scripted where possible; fill the table below | 🔲 | |
+| D1.1 | `scripts/ax-probe.swift`: what the focused element reports about its selection, and how fast | ✅ | adds a focus tree-walk fallback and treats a zero rect as no answer — both needed for Electron |
+| D1.2 | Run it in the daily apps, scripted where possible; fill the table below | 🔄 | 5 apps scripted 2026-11-25. Telegram, Mail, PhpStorm, Ghostty need Roman: drafts sync, or it is Claude's own terminal. **No rect has been seen drawn yet** — Ghostty has no Screen Recording |
 
 **Steps (detail):**
 
@@ -343,15 +343,17 @@ Applies to both triggers, the critique (⌥⌘E) and the translation (⌘C ⌘C)
 
 | App | Where | Selection rect | Field frame | Fix needed | Time | Usable tier |
 |-----|-------|----------------|-------------|------------|------|-------------|
-| TextEdit | document | | | | | |
+| TextEdit | document | ✅ 95×14, the selected words | ✅ | — | 0 ms | selection |
 | Mail | draft body | | | | | |
-| Safari | page text / textarea | | | | | |
-| Chrome | page text / textarea | | | | | |
-| Slack | message box / message | | | | | |
+| Safari | page text / textarea | ✅ both (page via text markers) | ✅ | — | 0–9 ms | selection |
+| Chrome | page text / textarea | ✅ both (page via text markers) | ✅ | **yes**: no focused element at all until the switch, then ~1–2 s to build the tree | 0 ms | selection, with the switch |
+| Slack | message box | ❌ zero rect | ✅ the message box, 1119×35 | **yes**, same as Chrome | 0 ms | field |
 | Telegram | message box / message | | | | | |
-| VS Code | editor | | | | | |
+| VS Code | editor | ❌ zero rect | ⚠️ a 0-wide, 18 pt hidden input that Monaco keeps **at the caret** | **yes**, then ~2 s | 0–13 ms | caret, via the field frame |
 | PhpStorm | editor | | | | | |
 | Ghostty | terminal text | | | | | |
+
+Findings that shape D2 regardless of the rest: the Electron/Chromium switch (`AXManualAccessibility`) has to be set **ahead of time** (when the app activates), not at the hotkey, because the app needs 1–2 s to build its tree; and Chrome's own `AXEnhancedUserInterface` answered "not implemented" yet the tree appeared anyway. Selecting a *received* message in Slack (reading, not writing) is untested.
 
 **Exit guardrails — Phase D1 → D2**
 
