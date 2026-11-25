@@ -42,6 +42,12 @@ var pid: pid_t = 0
 if AXUIElementCopyAttributeValue(systemWide, kAXFocusedApplicationAttribute as CFString, &focusedApp) == .success {
     AXUIElementGetPid(focusedApp as! AXUIElement, &pid)
 }
+// Fallback: the owner of the topmost normal window on screen, the way panel.rs finds the
+// app behind the card. Front-to-back order is what CGWindowList returns.
+if pid == 0, let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] {
+    let me = ProcessInfo.processInfo.processIdentifier
+    pid = list.first(where: { ($0[kCGWindowLayer as String] as? Int) == 0 && ($0[kCGWindowOwnerPID as String] as? pid_t) != me })?[kCGWindowOwnerPID as String] as? pid_t ?? 0
+}
 guard pid != 0, let front = NSRunningApplication(processIdentifier: pid) else {
     print(#"{"error":"no focused application"}"#)
     exit(1)
