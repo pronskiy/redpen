@@ -131,3 +131,20 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: --target universal-apple-darwin
+
+      # The runner is Intel, so a universal build that quietly lost its arm64 half would
+      # still launch here and look fine. Checked after the upload because tauri-action
+      # builds and uploads in one step; the release is a draft, so a red job here means
+      # do not press publish.
+      - name: Check the binary is universal
+        run: |
+          set -euo pipefail
+          bin=src-tauri/target/universal-apple-darwin/release/bundle/macos/redpen.app/Contents/MacOS/redpen
+          archs=$(lipo -archs "$bin")
+          echo "redpen.app architectures: $archs"
+          for a in arm64 x86_64; do
+            case " $archs " in
+              *" $a "*) ;;
+              *) echo "::error::redpen.app has no $a slice ($archs) — do not publish this draft"; exit 1 ;;
+            esac
+          done
